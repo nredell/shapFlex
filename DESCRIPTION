@@ -14,5 +14,6 @@ Imports:
     dplyr (>= 0.8.0.1),
     tidyr (>= 0.8.3),
     parallel,
-    methods
+    methods,
+    magrittr (>= 1.5)
 RoxygenNote: 6.1.1
