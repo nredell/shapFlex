@@ -22,6 +22,7 @@
 #' @param sample_size The number of randomly selected rows with randomly shuffled features used to compute the feature-level Shapley value.
 #' @param n_cores The number of cores used in the Shapley value calculations (>= 1). Limited to 1 core on Windows OS.
 #' @return A data.frame of the feature-level Shapley values for the target instance and selected features.
+#' @importFrom magrittr %>%
 #' @export
 shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_index", "row_name"),
                      models, predict_functions, dataset_weights = NULL, target_features = NULL,

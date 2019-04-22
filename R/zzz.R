@@ -1,4 +1,4 @@
-
+#' @importFrom magrittr %>%
 # Internal prediction function. Used at the end of shapFlex::shapFlex().
 predict_shapFlex <- function(models, data, data_feature_effects, predict_functions,
                              dataset_weights = NULL, ...) {
