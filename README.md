@@ -8,7 +8,7 @@ for ensemble models using potentially different, high-dimensional input datasets
 * **Flexibility**: 
     + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined predict() wrapper function.
     + Shapley values can be estimated for a given feature if it appears in <u>multiple datasets</u> in a more elaborate ensemble model.
-<br>
+
 * **Speed**:
     + The code itself hasn't been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
     to <u>select 1 or more target features of interest</u> and avoid having to compute Shapley values for all model features. This is especially 
