@@ -1,0 +1,18 @@
+Package: shapFlex
+Title: Stochastic Shapley Values for High-Dimensional Ensemble Models
+Version: 0.1.0
+Author: Nick Redell
+Maintainer: Nick Redell <nickredell@hotmail.com>
+Description: The purpose of shapFlex, short for Shapley flexibility, is to compute stochastic feature-level Shapley values for ensemble models using potentially different, high-dimensional input datasets. The main function in this package is shapFlex::shapFlex().
+Depends: 
+    R (>= 3.5.3)
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    data.table (>= 1.12.0),
+    dplyr (>= 0.8.0.1),
+    tidyr (>= 0.8.3),
+    parallel,
+    methods
+RoxygenNote: 6.1.1
