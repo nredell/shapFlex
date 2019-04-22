@@ -73,22 +73,21 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
     x
   })
 
-  # Combine feature effects across datasets. If only 1 input dataset, this is the function output.
   data_shap <- as.data.frame(dplyr::bind_rows(data_shap_by_dataset))
+
+  data_shap_pred_intercept <- data_shap %>%
+    dplyr::group_by(explained_instance, dataset) %>%  # group to get intercept.
+    dplyr::summarize("intercept" = intercept[1],
+                     "pred_shap_dataset" = sum(shap_effect, na.rm= TRUE),
+                     "dataset_weight" = dataset_weight[1]) %>%
+    dplyr::group_by(explained_instance) %>%  # group to get one instance-level intercept.
+    dplyr::summarize("feature_name" = "intercept",
+                     "shap_effect" = weighted.mean(intercept, dataset_weight))  # name columns to match the dataset below for dplyr::bind_rows().
 
   # Weighting Shapley effects across datasets.
   # To-do: a weighted standard deviation is needed for multiple datasets.
   #"pred_shap_overall" = weighted.mean(intercept, dataset_weight) + weighted.mean(pred_shap_dataset, dataset_weight)
   if (length(data) > 1) {
-
-    data_shap_pred_intercept <- data_shap %>%
-      dplyr::group_by(explained_instance, dataset) %>%  # group to get intercept.
-      dplyr::summarize("intercept" = intercept[1],
-                       "pred_shap_dataset" = sum(shap_effect, na.rm= TRUE),
-                       "dataset_weight" = dataset_weight[1]) %>%
-      dplyr::group_by(explained_instance) %>%  # group to get one instance-level intercept.
-      dplyr::summarize("feature_name" = "intercept",
-                       "shap_effect" = weighted.mean(intercept, dataset_weight))  # name columns to match the dataset below for dplyr::bind_rows().
 
     # Feature-level Shapley effects across datasets
     data_shap_pred_feature <- data_shap %>%
@@ -105,6 +104,9 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
   #   data_shap_pred_feature <- suppressWarnings(dplyr::bind_cols(data_shap_pred_feature, data_shap_pred_feature_var))
 
     data_shap <- as.data.frame(dplyr::bind_rows(data_shap_pred_intercept, data_shap_pred_feature))
+  } else {
+
+    data_shap <- as.data.frame(dplyr::bind_rows(data_shap_pred_intercept, data_shap))
   }
 
   return(data_shap)
