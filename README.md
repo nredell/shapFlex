@@ -1,6 +1,6 @@
 [![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
 
-# shapFlex <img src="shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
+# package::shapFlex <img src="shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
 The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values 
 for ensemble models using potentially different, high-dimensional input datasets. The main function in this package is `shapFlex::shapFlex()`.
