@@ -1,16 +1,16 @@
 [![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
 
-# shapFlex <img src="shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
+# package::shapFlex <img src="shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
 The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values 
-for ensemble models using potentially different, high-dimensional input datasets. The main function in this package is `shapFlex::shapFlex()`.
+for machine learning ensemble models using potentially different, high-dimensional input datasets. **[Shapley values](https://christophm.github.io/interpretable-ml-book/shapley.html)** are a great model-independent way to understand both **global feature importance** (when plotted like a [partial dependence plot](https://projecteuclid.org/download/pdf_1/euclid.aos/1013203451)) and instance/row-level **local feature importance** in black-box machine learning models. The main function in this package is `shapFlex::shapFlex()`.
 
-* **Flexibility**: 
+* **package::shapFlex Flexibility**: 
     + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined predict() wrapper function.
     + Shapley values can be estimated for a given feature if it appears in <u>multiple datasets</u> in a more elaborate ensemble model.
 
-* **Speed**:
-    + The code itself hasn't been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
+* **package::shapFlex Speed**:
+    + The code itself hasn't necessarily been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
     to <u>select 1 or more target features of interest</u> and avoid having to compute Shapley values for all model features. This is especially 
     useful in high-dimensional models as the computation of a Shapley value is exponential in the number of features.
 
