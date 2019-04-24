@@ -23,9 +23,11 @@ devtools::install_github("nredell/shapFlex")
 library(shapFlex)
 ```
 
-## Walkthrough
+## Gettnig Started
 
 Detailed **[shapFlex overview vignette](https://nredell.github.io/data_science_blog/shapFlex/)**.
+
+Detailed **[shapFlex runtime/speed vignette](https://nredell.github.io/data_science_blog/shapFlex/speed/)**.
 
 ## Example
 
