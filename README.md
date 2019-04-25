@@ -23,7 +23,7 @@ devtools::install_github("nredell/shapFlex")
 library(shapFlex)
 ```
 
-## Gettnig Started
+## Getting Started
 
 Detailed **[shapFlex overview vignette](https://nredell.github.io/data_science_blog/shapFlex/)**.
 
