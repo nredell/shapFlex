@@ -27,7 +27,11 @@ library(shapFlex)
 
 Detailed **[shapFlex overview vignette](https://nredell.github.io/data_science_blog/shapFlex/)**.
 
-Detailed **[shapFlex runtime/speed vignette](https://nredell.github.io/data_science_blog/shapFlex/speed/)**.
+**[shapFlex runtime/speed vignette](https://nredell.github.io/data_science_blog/shapFlex/speed/)**.
+
+**[shapFlex consistency vignette](https://nredell.github.io/data_science_blog/shapFlex/consistency/)**: A look at how the 
+stochastic Shapley values of `shapFlex` correlate with the exact Shapley values produced by `catboost`'s implementation of 
+**[shap](https://github.com/slundberg/shap)**.
 
 ## Example
 
