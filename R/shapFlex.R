@@ -193,7 +193,7 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
     data_out <- dplyr::left_join(data_out, data_merge, by = c("explained_instance", "feature_name"))
 
     # Re-order columns.
-    data_out <- dplyr::select(data_out, explained_instance, feature_name, feature_value, shap_effect, shap_effect_sd)
+    data_out <- as.data.frame(dplyr::select(data_out, explained_instance, feature_name, feature_value, shap_effect, shap_effect_sd))
   }
 
   return(data_out)
