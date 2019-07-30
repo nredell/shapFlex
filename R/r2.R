@@ -24,6 +24,9 @@ r2 <- function(shap, y, scale = c("r2", "1")) {
          be 'r2' or '1'.")
   }
 
+  # Coerce 1-column data.frames and matrices into vectors.
+  y <- as.vector(y)
+
   # The default feature scaling is the overall model R2.
   scale <- if (length(scale) > 1) {"r2"} else {scale}
 
