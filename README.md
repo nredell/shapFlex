@@ -5,6 +5,9 @@
 The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values 
 for machine learning ensemble models using potentially different, high-dimensional input datasets. **[Shapley values](https://christophm.github.io/interpretable-ml-book/shapley.html)** are a great model-independent way to understand both **global feature importance** (when plotted like a [partial dependence plot](https://projecteuclid.org/download/pdf_1/euclid.aos/1013203451)) and instance/row-level **local feature importance** in black-box machine learning models. The main function in this package is `shapFlex::shapFlex()`.
 
+This package implements a slight modification 
+of [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007/s10115-013-0679-x#citeas) to support Shapley value calculations for user-specified subsets of features.
+
 * **package::shapFlex Flexibility**: 
     + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined predict() wrapper function.
     + Shapley values can be estimated for a given feature if it appears in <u>multiple datasets</u> in a more elaborate ensemble model.
@@ -124,3 +127,14 @@ DT::datatable(data_shap)
 ```
 ![](./shapFlex_output.png)
 
+***
+
+## Cite
+
+At the moment, the best citation for this package is related to the `shapFlex::r2()` function.
+
+Redell, N. (2019). [https://arxiv.org/abs/1908.09718](Shapley decomposition of R^2 in machine learning models). arXiv preprint arXiv:1908.09718.
+
+## References
+
+Štrumbelj, E. & Kononenko, I. (2014) Explaining prediction models and individual predictions with feature contributions. Knowl Inf Syst (2014) 41: 647. https://doi.org/10.1007/s10115-013-0679-x
