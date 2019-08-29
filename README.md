@@ -1,4 +1,6 @@
 [![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
+[![Travis Build
+Status](https://travis-ci.org/nredell/shapFlex.svg?branch=master)](https://travis-ci.org/nredell/shapFlex)
 
 # package::shapFlex <img src="shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
