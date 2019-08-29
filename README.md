@@ -6,7 +6,7 @@ The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochast
 for machine learning ensemble models using potentially different, high-dimensional input datasets. **[Shapley values](https://christophm.github.io/interpretable-ml-book/shapley.html)** are a great model-independent way to understand both **global feature importance** (when plotted like a [partial dependence plot](https://projecteuclid.org/download/pdf_1/euclid.aos/1013203451)) and instance/row-level **local feature importance** in black-box machine learning models. The main function in this package is `shapFlex::shapFlex()`.
 
 This package implements a slight modification 
-of [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007/s10115-013-0679-x#citeas) to support Shapley value calculations for user-specified subsets of features.
+of [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) to support Shapley value calculations for user-specified subsets of features.
 
 * **package::shapFlex Flexibility**: 
     + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined predict() wrapper function.
