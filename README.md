@@ -133,7 +133,7 @@ DT::datatable(data_shap)
 
 At the moment, the best citation for this package is related to the `shapFlex::r2()` function.
 
-Redell, N. (2019). [https://arxiv.org/abs/1908.09718](Shapley decomposition of R^2 in machine learning models). arXiv preprint arXiv:1908.09718.
+Redell, N. (2019). [Shapley decomposition of R^2 in machine learning models](https://arxiv.org/abs/1908.09718). arXiv preprint arXiv:1908.09718.
 
 ## References
 
