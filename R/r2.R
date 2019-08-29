@@ -2,7 +2,7 @@
 #' Compute feature importances using a Shapley variance decomposition of R^{2}
 #'
 #' This function uses pre-computed Shapley values to decompose the overall model R^{2} into feature-level
-#' attributions of variance explained using the formulation of Redell (2019).
+#' attributions of variance explained using the formulation of Redell (2019) arXiv:1908.09718.
 #'
 #' @param shap A matrix or data.frame of Shapley values. The dimensions should be 'number of instances' by
 #' 'number of features'. The predicted outcome for each instance, used in the R^{2} caluclation, is the row

@@ -4,3 +4,4 @@
 ^build_package$
 ^vignettes$
 ^\.Rhistory$
+^\.travis\.yml$

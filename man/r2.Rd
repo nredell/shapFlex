@@ -22,5 +22,5 @@ importances or attribution of variance explained ('r2_shap').
 }
 \description{
 This function uses pre-computed Shapley values to decompose the overall model R^{2} into feature-level
-attributions of variance explained using the formulation of Redell (2019).
+attributions of variance explained using the formulation of Redell (2019) arXiv:1908.09718.
 }

@@ -6,7 +6,7 @@ Maintainer: Nick Redell <nickredell@hotmail.com>
 Description: The purpose of shapFlex, short for Shapley flexibility, is to compute stochastic feature-level Shapley values for ensemble models using potentially different, high-dimensional input datasets. The main function in this package is shapFlex::shapFlex().
 Depends: 
     R (>= 3.4.0)
-License: GPL-3
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports: 
