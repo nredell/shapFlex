@@ -2,7 +2,7 @@
 [![Travis Build
 Status](https://travis-ci.org/nredell/shapFlex.svg?branch=master)](https://travis-ci.org/nredell/shapFlex)
 
-# package::shapFlex <img src="shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
+# package::shapFlex <img src="./tools/shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
 The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values 
 for machine learning ensemble models using potentially different, high-dimensional input datasets. **[Shapley values](https://christophm.github.io/interpretable-ml-book/shapley.html)** are a great model-independent way to understand both **global feature importance** (when plotted like a [partial dependence plot](https://projecteuclid.org/download/pdf_1/euclid.aos/1013203451)) and instance/row-level **local feature importance** in black-box machine learning models. The main function in this package is `shapFlex::shapFlex()`.
@@ -10,11 +10,14 @@ for machine learning ensemble models using potentially different, high-dimension
 This package implements a slight modification 
 of [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) to support Shapley value calculations for user-specified subsets of features.
 
-* **package::shapFlex Flexibility**: 
-    + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined predict() wrapper function.
+* **Flexibility**: 
+    + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined 
+    `predict()` wrapper function.
     + Shapley values can be estimated for a given feature if it appears in <u>multiple datasets</u> in a more elaborate ensemble model.
+    + The Monte Carlo sampling algorithm supports explore, exploit capabilities: (1) many randomly sampled comparison instances with 
+    few feature shuffles or (2) few randomly sampled comparison instances with many feature shuffles.
 
-* **package::shapFlex Speed**:
+* **Speed**:
     + The code itself hasn't necessarily been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
     to <u>select 1 or more target features of interest</u> and avoid having to compute Shapley values for all model features. This is especially 
     useful in high-dimensional models as the computation of a Shapley value is exponential in the number of features.
@@ -45,11 +48,11 @@ stochastic Shapley values of `shapFlex` correlate with the exact Shapley values 
 dataset from the `randomForest` package.
 
 ``` r
-# Load packages and data.
 library(dplyr)
 library(shapFlex)
 library(glmnet)
 library(randomForest)
+library(future)
 
 data("imports85", package = "randomForest")
 data <- imports85
@@ -66,24 +69,24 @@ outcome_name <- names(data)[outcome_col]
 model_formula <- formula(paste0(outcome_name,  "~ ."))
 
 set.seed(224)
-model_lasso <- glmnet::cv.glmnet(x = model.matrix(model_formula, data), 
+model_lasso <- glmnet::cv.glmnet(x = model.matrix(model_formula, data),
                                  y = as.matrix(data[, outcome_col, drop = FALSE], ncol = 1))
 
 set.seed(224)
 model_rf <- randomForest::randomForest(formula = model_formula, data = data, ntree = 200)
 #------------------------------------------------------------------------------
-# A user-defined prediction function that takes 2 positional arguments and returns 
+# A user-defined prediction function that takes 2 positional arguments and returns
 # a 1-column data.frame (see the package overview vignette for more info).
 
-predict_ensemble <- function(models, data, ...) {
-  
+predict_function <- function(models, data) {
+
   y_pred_lasso <- data.frame(predict(models[[1]], model.matrix(~ ., data)))  # LASSO
   y_pred_rf <- data.frame(predict(models[[2]], data))  # Random Forest
-  
+
   data_pred <- dplyr::bind_cols(y_pred_lasso, y_pred_rf)
-  
+
   data_pred <- data.frame("y_pred" = rowMeans(data_pred, na.rm = TRUE))
-  
+
   return(data_pred)
 }
 #------------------------------------------------------------------------------
@@ -92,33 +95,35 @@ predict_ensemble <- function(models, data, ...) {
 # A list of data.frame(s) of model features suitable for the user-defined predict function(s).
 data_list <- list(data[, -(outcome_col), drop = FALSE])
 # Dataset row numbers or indicies.
-explain_instances <- 1:30
+explain_instances <- 1:5
 # Are the instances to explain row numbers/indices or row names ('row_name') in the input data?
 explain_instance_id <- "row_index"
 # A list of of model objects. Nested lists of length(data_list) are needed if length(data_list) > 1.
-model_list <- list(model_lasso, model_rf)
+models <- list(model_lasso, model_rf)
 # A list of length 1 vectors with length(prediction_functions) == length(data_list).
-predict_functions <- list("predict_ensemble")
-# The number of randomly selected dataset rows used to calculate the feature-level Shapley values.
+predict_functions <- list(predict_function)
+#nThe number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.
 sample_size <- 60
-# Number of cores to use in parallel::mclapply(); limited to 1 on Windows OS.
-n_cores <- if (Sys.info()["sysname"] == "Windows") {1} else {parallel::detectCores() - 1}
+
 #------------------------------------------------------------------------------
-# Explaining 1 instance at a time-of 30 total-with shapFlex::shapFlex(). This example, explaining with 
-# all model features, may take a minute or two to run.
+# Explaining 1 instance at a time-of 5 total-with shapFlex::shapFlex().
+
+# Setup multi-core or multi-session parallel processing.
+future::plan(future::multiprocess)
 
 explained_instances <- vector("list", length(explain_instances))
 
 set.seed(224)
 for (i in seq_along(explain_instances)) {
-  
-  explained_instances[[i]] <- shapFlex::shapFlex(data = data_list, 
+
+  explained_instances[[i]] <- shapFlex::shapFlex(data = data_list,
                                                  explain_instance = explain_instances[i],  # loop
                                                  explain_instance_id = explain_instance_id,
-                                                 models = model_list, 
-                                                 predict_functions = predict_functions, 
-                                                 sample_size = sample_size, 
-                                                 n_cores = n_cores)
+                                                 models = models,
+                                                 predict_functions = predict_functions,
+                                                 sample_size = sample_size,
+                                                 shuffle = 1,
+                                                 use_future = TRUE)
 }
 #------------------------------------------------------------------------------
 # Return the list of instance-level results as a data.frame.
@@ -127,7 +132,7 @@ data_shap <- dplyr::bind_rows(explained_instances)
 
 DT::datatable(data_shap)
 ```
-![](./shapFlex_output.png)
+![](./tools/shapFlex_output.png)
 
 ***
 

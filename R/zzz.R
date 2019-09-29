@@ -1,7 +1,6 @@
-#' @importFrom magrittr %>%
 # Internal prediction function. Used at the end of shapFlex::shapFlex().
 predict_shapFlex <- function(models, data, data_feature_effects, predict_functions,
-                             dataset_weights = NULL, ...) {
+                             dataset_weights = NULL) {
 
   # Set the default weights for combining predictions across datasets to a uniform weighting scheme.
   if (is.null(dataset_weights)) {dataset_weights <- rep(1 / length(models), length(models))}
@@ -25,11 +24,11 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
     # Select the Shapley-sampled dataset for the user-defined prediction function(s). The meta-information columns are
     # hardcoded so if the shapFlex::shapFlex function changes to add new meta info, this needs to change or become
     # dynamic.
-    data_model <- data_shap_instances[, 1:(ncol(data_shap_instances) - 5), drop = FALSE]
-    data_meta <- data_shap_instances[, (ncol(data_shap_instances) - 4):ncol(data_shap_instances), drop = FALSE]
+    data_model <- data_shap_instances[, 1:(ncol(data_shap_instances) - 6), drop = FALSE]
+    data_meta <- data_shap_instances[, (ncol(data_shap_instances) - 5):ncol(data_shap_instances), drop = FALSE]
 
     # length(predict_functions[[i]]) == 1 for each input dataset.
-    dataset_predictions <- (eval(parse(text = predict_functions[[i]])))(models[[i]], data_model)
+    dataset_predictions <- predict_functions[[i]](models[[i]], as.data.frame(data_model))
 
     dataset_predictions <- dplyr::bind_cols(data_meta, dataset_predictions)
     dataset_predictions
@@ -39,7 +38,7 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
   dataset_intercept <- lapply(datasets_with_a_target_feature, function(i) {
     # Predict on the original data to get the baseline prediction--i.e., intercept--against which the Shapley
     # values deviate.
-    dataset_intercept <- (eval(parse(text = predict_functions[[i]])))(models[[i]], data[[i]])
+    dataset_intercept <- predict_functions[[i]](models[[i]], data[[i]])
     dataset_intercept <- mean(dataset_intercept[, 1], na.rm = TRUE)  # hardcoded to handle univariate-outcome models.
     dataset_intercept
   })
@@ -55,34 +54,33 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
     # Cast the dataframe to, for each random sample, take the difference between the column-shuffled row with
     # the fixed target feature and the dynamic target feature. This is the sample-level Shapley value for a given
     # feature and instance.
-    x <- data.table::dcast(x, dataset + explained_instance + feature_name + sample ~ feature_group,
-                           value.var = user_fun_y_pred_name)
+    x <- tidyr::spread(x, key = .data$feature_group, value = !!user_fun_y_pred_name)
 
     # Calculate the sample-feature-level Shapley value.
     x$shap_effect <- x$feature_static - x$feature_dynamic
 
     x <- x %>%
-      dplyr::group_by(explained_instance, feature_name) %>%
-      dplyr::mutate("shap_effect_sd" = sd(shap_effect, na.rm = TRUE)) %>%  # sd() not working with summarize().
+      dplyr::group_by(.data$explained_instance, .data$feature_name) %>%
+      dplyr::mutate("shap_effect_sd" = stats::sd(.data$shap_effect, na.rm = TRUE)) %>%  # sd() not working with summarize().
       dplyr::summarize("dataset" = dataset_number,  # defined outside of the dataframe.
-                       "shap_effect_sd" = shap_effect_sd[1],  # Shapley stamdard deviation.
-                       "shap_effect" = mean(shap_effect, na.rm = TRUE),  # the feature-level Shapley value.
+                       "shap_effect_sd" = .data$shap_effect_sd[1],  # Shapley stamdard deviation.
+                       "shap_effect" = base::mean(.data$shap_effect, na.rm = TRUE),  # the feature-level Shapley value.
                        "dataset_weight" = dataset_weights[dataset_number],  # from the 'dataset_weights' input vector.
                        "intercept" = dataset_intercept[[i]])
 
     x
   })
 
-  data_shap <- as.data.frame(dplyr::bind_rows(data_shap_by_dataset))
+  data_shap <- dplyr::bind_rows(data_shap_by_dataset)
 
   data_shap_pred_intercept <- data_shap %>%
-    dplyr::group_by(explained_instance, dataset) %>%  # group to get intercept.
-    dplyr::summarize("intercept" = intercept[1],
-                     "pred_shap_dataset" = sum(shap_effect, na.rm= TRUE),
-                     "dataset_weight" = dataset_weight[1]) %>%
-    dplyr::group_by(explained_instance) %>%  # group to get one instance-level intercept.
+    dplyr::group_by(.data$explained_instance, .data$dataset) %>%  # group to get intercept.
+    dplyr::summarize("intercept" = .data$intercept[1],
+                     "pred_shap_dataset" = base::sum(.data$shap_effect, na.rm = TRUE),
+                     "dataset_weight" = .data$dataset_weight[1]) %>%
+    dplyr::group_by(.data$explained_instance) %>%  # group to get one instance-level intercept.
     dplyr::summarize("feature_name" = "intercept",
-                     "shap_effect" = weighted.mean(intercept, dataset_weight))  # name columns to match the dataset below for dplyr::bind_rows().
+                     "shap_effect" = stats::weighted.mean(.data$intercept, .data$dataset_weight))  # name columns to match the dataset below for dplyr::bind_rows().
 
   # Weighting Shapley effects across datasets.
   # To-do: a weighted standard deviation is needed for multiple datasets.
@@ -91,8 +89,8 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
 
     # Feature-level Shapley effects across datasets
     data_shap_pred_feature <- data_shap %>%
-      dplyr::group_by(explained_instance, feature_name) %>%
-      dplyr::summarize("shap_effect" = sum(shap_effect * dataset_weight, na.rm = TRUE))
+      dplyr::group_by(.data$explained_instance, .data$feature_name) %>%
+      dplyr::summarize("shap_effect" = base::sum(.data$shap_effect * .data$dataset_weight, na.rm = TRUE))
 
   # Placehodler code.
   #   data_shap_pred_feature_var <- data_shap %>%
@@ -103,10 +101,11 @@ predict_shapFlex <- function(models, data, data_feature_effects, predict_functio
   #
   #   data_shap_pred_feature <- suppressWarnings(dplyr::bind_cols(data_shap_pred_feature, data_shap_pred_feature_var))
 
-    data_shap <- as.data.frame(dplyr::bind_rows(data_shap_pred_intercept, data_shap_pred_feature))
+    data_shap <- dplyr::bind_rows(data_shap_pred_intercept, data_shap_pred_feature)
+
   } else {
 
-    data_shap <- as.data.frame(dplyr::bind_rows(data_shap_pred_intercept, data_shap))
+    data_shap <- dplyr::bind_rows(data_shap_pred_intercept, data_shap)
   }
 
   return(data_shap)

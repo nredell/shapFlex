@@ -7,39 +7,41 @@
 shapFlex(data, explain_instance = 1,
   explain_instance_id = c("row_index", "row_name"), models,
   predict_functions, dataset_weights = NULL, target_features = NULL,
-  sample_size = 60, n_cores = 1)
+  sample_size = 60, shuffle = 1, use_future = FALSE)
 }
 \arguments{
 \item{data}{A list of 1 or more dataframes that contain the instance/row to be explained.}
 
-\item{explain_instance}{An integer that identifies the instance/row to be explained. If length(data) > 1 and the
+\item{explain_instance}{An integer that identifies the instance/row to be explained. If \code{length(data)} > 1 and the
 number of rows differ between datasets, a row name that idenftifies the target instance in each dataset that can be coerced
-to an integer with as.integer(row.names(data)).}
+to an integer with \code{as.integer(row.names(data))}.}
 
-\item{explain_instance_id}{For finding the location of 'explain_instance'. 'row_index' is the dataset row number (default) or 'row_name' if
-multiple datasets are used in an ensemble model.}
+\item{explain_instance_id}{For finding the location of \code{explain_instance}. \code{row_index} is the dataset row number (default) or
+\code{row_name} if multiple datasets are used in an ensemble model.}
 
 \item{models}{A list containing a vector of 1 or more trained models. For models with 1 input dataset, the length of the
-list holding the model(s) is 1. For multiple input datasets, 'models' is a nested list with length equal to length(data).}
+list holding the model(s) is 1. For multiple input datasets, \code{models} is a nested list with length equal to length(data).}
 
-\item{predict_functions}{A list containing a length-1 characeter vector identifying the dataset-specifc prediction function name.
-The length of the list is equal to length(data).}
+\item{predict_functions}{A list containing the user-specified dataset-specifc prediction function.
+The length of the list is equal to \code{length(data)}.}
 
-\item{dataset_weights}{Optional. A sum-to-one vector with length(data) that weights the feature-level Shapley value combination across datasets.
+\item{dataset_weights}{Optional. A sum-to-one numeric vector with \code{length(data)} that weights the feature-level Shapley value combination across datasets.
 Only needed for ensemble models that predict with different datasets (length(data) > 1). The default value is a uniform weighting scheme.}
 
-\item{target_features}{Optional. The feature names in 'data' for which feature effects will be produced. For high-dimensional models, selecting a subset
+\item{target_features}{Optional. A character vector of feature names in \code{data} for which Shapley values will be produced. For high-dimensional models, selecting a subset
 of interesting features may dramatically speed up computation time. The default value is to return feature effects for all features across all input datasets.}
 
-\item{sample_size}{The number of randomly selected rows with randomly shuffled features used to compute the feature-level Shapley value.}
+\item{sample_size}{The number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.}
 
-\item{n_cores}{The number of cores used in the Shapley value calculations (>= 1). Limited to 1 core on Windows OS.}
+\item{shuffle}{The number of times the features in each randomly selected comparison are shuffled. This is an explore, exploit parameter.}
+
+\item{use_future}{Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel.}
 }
 \value{
 A data.frame of the feature-level Shapley values for the target instance and selected features.
 }
 \description{
 This function uses user-defined trained models and prediction functions to compute approximate Shapley values for
-single or ensemble models. Shapley values can be calculated for a subset of model features which reduces the
+single models or ensemble models. Shapley values can be calculated for a subset of model features which reduces the
 typically expensive computation of approximate Shapley values in high-dimensional models or model ensembles.
 }

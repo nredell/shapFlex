@@ -13,8 +13,8 @@ sum of Shapley values across columns.}
 
 \item{y}{A vector or 1-column matrix or data.frame with the outcome being predicted.}
 
-\item{scale}{The scaling of the feature importances. 'r2' (default) scales feature-level importances to the
-overall model R^{2} while '1' scales feature importances along a 0 to 1 scale.}
+\item{scale}{The scaling of the feature importances. \code{r2} (default) scales feature-level importances to the
+overall model R^{2} while \code{1} scales feature importances along a 0 to 1 scale.}
 }
 \value{
 A data.frame of the feature importances with the model's global R^{2} ('r2') and the feature-level
