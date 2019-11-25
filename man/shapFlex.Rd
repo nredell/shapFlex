@@ -7,7 +7,8 @@
 shapFlex(data, explain_instance = 1,
   explain_instance_id = c("row_index", "row_name"), models,
   predict_functions, dataset_weights = NULL, target_features = NULL,
-  sample_size = 60, shuffle = 1, use_future = FALSE)
+  sample_size = 60, shuffle = 1, use_future = FALSE,
+  keep_samples = FALSE)
 }
 \arguments{
 \item{data}{A list of 1 or more dataframes that contain the instance/row to be explained.}
@@ -36,6 +37,8 @@ of interesting features may dramatically speed up computation time. The default 
 \item{shuffle}{The number of times the features in each randomly selected comparison are shuffled. This is an explore, exploit parameter.}
 
 \item{use_future}{Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel.}
+
+\item{keep_samples}{= Boolean. If \code{TRUE}, the Monte Carlo sampling data is returned for \code{interaction()}.}
 }
 \value{
 A data.frame of the feature-level Shapley values for the target instance and selected features.

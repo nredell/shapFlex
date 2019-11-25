@@ -21,6 +21,7 @@
 #' @param sample_size The number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.
 #' @param shuffle The number of times the features in each randomly selected comparison are shuffled. This is an explore, exploit parameter.
 #' @param use_future Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel.
+#' @param keep_samples = Boolean. If \code{TRUE}, the Monte Carlo sampling data is returned for \code{interaction()}.
 #' @return A data.frame of the feature-level Shapley values for the target instance and selected features.
 #' @importFrom magrittr %>%
 #' @importFrom rlang !!
@@ -28,12 +29,12 @@
 #' @export
 shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_index", "row_name"),
                      models, predict_functions, dataset_weights = NULL, target_features = NULL,
-                     sample_size = 60, shuffle = 1, use_future = FALSE) {
+                     sample_size = 60, shuffle = 1, use_future = FALSE, keep_samples = FALSE) {
 
   # This function uses 1 internal function: predict_shapFlex.
 
   if (!methods::is(data, "list")) {
-    stop("The 'data' argument needs to be a list of 1 or more dataframes.")
+    stop("The 'data' argument needs to be a list of 1 or more data.frames.")
   }
 
   if (is.null(explain_instance) || (!methods::is(as.integer(explain_instance), "integer") &&
@@ -78,13 +79,17 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
   # contain a target_feature, but this approach of keeping the NULL list slots makes the indexing clearer.
   ensemble_feature_effects <- vector("list", length(data))
 
+  h <- 1
   for (h in datasets_with_a_target_feature) {
 
     # If 'explain_instance' is a row name, convert it to an index. This will allow us to compare the same instance
     # across datasets with a different number of rows--think of datasets with lagged features having different nrow(data).
     if (explain_instance_id == "row_name") {
+
       explain_instance_index <- which(as.integer(row.names(data[[h]])) == explain_instance)  # convert row name to a row number.
+
     } else {
+
       explain_instance_index <- explain_instance  # row number in the dataset.
     }
 
@@ -107,10 +112,11 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
 
       n_rows <- nrow(data[[h]])
 
+      i <- 1
       data_feature_effects_by_sample <- lapply_function(1:sample_size, function(i) {
 
-        # Select one row, or row index, from the input dataset.
-        row_index_random <- sample(1:n_rows, size = 1, replace = FALSE)
+        # Select one row, or row index, from the input dataset, excluding the target index.
+        row_index_random <- sample((1:n_rows)[-explain_instance_index], size = 1, replace = FALSE)
 
         data_feature_effects_shuffle <- lapply(1:shuffle, function(pass) {
 
@@ -126,7 +132,7 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
 
           # Each randomly sampled and shuffled comparison instance will isolate the effect of each target_feature:
           # This lapply() reutrns a 1 sample * n_target_features list.
-          #j <- 1
+          j <- 1
           data_feature_effects_sample_i <- lapply(1:n_target_features, function(j) {
 
             # For each feature in the loop, find the position or index of the shuffled column.
@@ -138,6 +144,7 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
             # If the shuffled feature is not in the last column, replace columns (feature_index + 1):(n_features)
             # in the target instance with the same columns from our randomly selected instance.
             if (feature_index <= (n_features - 1)) {
+
               target_instance_with_feature[, (feature_index + 1):(n_features)] <- random_instance[, (feature_index + 1):(n_features), drop = FALSE]
             }
 
@@ -147,35 +154,48 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
             target_instance_without_feature <- target_instance_with_feature
             target_instance_without_feature[, feature_index] <- random_instance[, feature_index]
 
-            # Re-order the datasets to match the data input. We'll also add a group identifier so that we can
-            # calculate the marginal effect of each predictor with a group_by() function.
+            # Re-order the datasets to match the data input for the user-defined predict() function.
+            # We'll also add a group identifier so that we can calculate the marginal effect of each
+            # predictor with a group_by() function.
             target_instance_with_feature <- target_instance_with_feature[, order(feature_indices_random), drop = FALSE]
             target_instance_without_feature <- target_instance_without_feature[, order(feature_indices_random), drop = FALSE]
 
             data_target_instance <- dplyr::bind_rows(list(target_instance_with_feature, target_instance_without_feature))
 
-            # Save the output dataframe to our list.
+            # Save the output data.frame to our list.
             data_target_instance$sample <- i
 
+            # target_cols <- which(names(data[[h]]) %in% names(data[[h]])[feature_indices_random[1:feature_index]])
+            # comparison_cols <- (1:n_features)[!1:n_features %in% target_cols]
+            # data_target_instance$target_cols <- list(target_cols)
+            # if (length(comparison_cols) == 0) {
+            #
+            #   data_target_instance$comparison_cols <- list(0)
+            #
+            # } else {
+            #
+            #   data_target_instance$comparison_cols <- list(comparison_cols)
+            # }
+
             data_target_instance
-          })  # End 'j' loop.
+          })  # End 'j' loop over model/target features.
 
           data_out <- dplyr::bind_rows(data_feature_effects_sample_i)
 
           data_out$shuffle <- pass
 
           data_out
-        })  # End 'pass' loop.
+        })  # End 'pass' loop of multiple shuffles between the target instance and the same random instance.
 
         dplyr::bind_rows(data_feature_effects_shuffle)
-      })  # End 'i' loop.
+      })  # End 'i' loop over randomly sampled instances.
 
       # Collapse the sample-level dataset to get a dataset with n_samples * n_features * 2 rows.
       ensemble_feature_effects[[h]] <- dplyr::bind_rows(data_feature_effects_by_sample)
 
       # 'feature_static' represents the column-shuffled target instance with the unchanged feature of interest; 'feature_dynamic'
       # represents the column-shuffled comparison instance that only differs with respect to the feature of interest.
-      ensemble_feature_effects[[h]]$feature_group <- rep(c('feature_static', 'feature_dynamic'), n_target_features * sample_size * shuffle)
+      ensemble_feature_effects[[h]]$feature_group <- rep(c('feature_static', 'feature_random'), n_target_features * sample_size * shuffle)
       ensemble_feature_effects[[h]]$feature_name <- rep(rep(target_features_in_dataset, each = 2), sample_size * shuffle)
 
       ensemble_feature_effects[[h]]$dataset <- h
@@ -185,16 +205,25 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
 
       ensemble_feature_effects[[h]] <- NULL  # The instance to explain was not in the dataset.
     }
-  }  # End 'h' loop.
+  }  # End 'h' loop over datasets if multiple datasets are provided.
 
   if (all(unlist(lapply(ensemble_feature_effects, is.null)))) {
     stop("No Shapley values were returned; the likely cause is that 'explain_instance' is not in any of the input datasets.")
   }
 
-  # shapFlex::predict_shapFlex.
-  data_out <- predict_shapFlex(models, data, data_feature_effects = ensemble_feature_effects, predict_functions,
-                               dataset_weights = dataset_weights)
+  #----------------------------------------------------------------------------
+  # shapFlex:::predict_shapFlex.
+  data_out <- predict_shapFlex(models = models, data = data, data_feature_effects = ensemble_feature_effects,
+                               predict_functions = predict_functions, dataset_weights = dataset_weights, keep_samples = keep_samples)
 
+  # If keep_samples is TRUE, those will be return()ed as an attribute.
+  if (isTRUE(keep_samples)) {
+
+    data_samples <- attributes(data_out)$data_samples
+    attr(data_out, "data_samples") <- NULL
+  }
+
+  #----------------------------------------------------------------------------
   # Add the feature values if only one input dataset is present. To-do: expand this to multiple datasets with
   # the potential of the same feature name having different values across datasets.
   if (length(data) == 1) {
@@ -210,7 +239,8 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
       data_merge$explained_instance <- as.numeric(row.names(data_merge))
     }
 
-    # Suppress the warning of factors and numeric features being combined into one 'feature_value' column and coerced to characters.
+    # Melt the data.frame for merging. Suppress the warning of factors and numeric features being
+    # combined into one 'feature_value' column and coerced to characters.
     data_merge <- suppressWarnings(tidyr::gather(data_merge, key = "feature_name", value = "feature_value", -.data$explained_instance))
 
     data_out <- dplyr::left_join(data_out, data_merge, by = c("explained_instance", "feature_name"))
@@ -220,5 +250,14 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
                                             .data$feature_value, .data$shap_effect, .data$shap_effect_sd))
   }
 
-  return(data_out)
+  if (isTRUE(keep_samples)) {
+
+    attr(data_out, "data_samples") <- data_samples
+
+    return(data_out)
+
+  } else {
+
+    return(data_out)
+  }
 }
