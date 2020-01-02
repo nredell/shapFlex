@@ -4,17 +4,33 @@
 #' single models. Shapley values can be calculated for a subset of model features which reduces the
 #' typically expensive computation of approximate Shapley values in high-dimensional models.
 #'
-#' @param explain TBD
-#' @param reference TBD
-#' @param model TBD
-#' @param predict_functions TBD
-#' @param target_features Optional. A character vector of feature names in \code{data} for which Shapley values will be produced. For high-dimensional models, selecting a subset
-#' of interesting features may dramatically speed up computation time. The default value is to return feature effects for all features across all input datasets.
-#' @param causal TBD
-#' @param causal_weights TBD
-#' @param sample_size The number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.
-#' @param use_future Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel.
-#' @return A data.frame of the feature-level Shapley values for the target instance and selected features.
+#' @param explain A data.frame of instances to be explained using Shapley values. \code{explain} is passed internally
+#' as a data.frame to \code{predict_function}.
+#' @param reference Optional. A data.frame with the same format as \code{explain}--with possibly more or fewer rows--of instances
+#' which serve as a reference group against which the Shapley value deviations from \code{explain} are compared. That is,
+#' \code{reference} is used to calculate an average prediction or intercept value. \code{reference} is passed internally
+#' as a data.frame to \code{predict_function}.
+#' @param model A trained prediction model object used to compute Shapley values. \code{model} is passed internally to \code{predict_function}.
+#' @param predict_function A \code{predict()}-type wrapper function that takes 2 required positional arguments--(1) the trained model from \code{model}
+#' and (2) a data.frame of instances with the same format as \code{explain}. For numeric outcomes, the function should \code{return()} a
+#' 1-column data.frame of model predictions; the column name does not matter.
+#' @param target_features Optional. A character vector that is a subset of feature names in \code{explain} for which Shapley values will be computed.
+#' For high-dimensional models, selecting a subset of interesting features may dramatically speed up computation time. The default behavior is
+#' to return Shapley values for all instances and features in \code{explain}.
+#' @param causal Optional. A list of 1 or more formulas that specify a causal direction for computing asymmetric Shapley values. For example,
+#' \code{list(x_1 ~ x_2 + x_3)} or \code{list(formula(x_1 ~ x_2 + x_3))} computes Shapley values for \code{x_1} after conditioning on
+#' the true/actual values of \code{x_2} and \code{x_3} for the instance being explained. Only 1 feature is allowed on the left hand side
+#' of the formula, and only 1 formula is allowed per left hand side feature i.e., no duplicated causal constraints for a target feature.
+#' @param causal_weights Optional. A numeric vector of \code{length(causal)} with weights between 0 and 1 that specifies the strength of
+#' the causal asymmetric Shapley values. A weight of 1--the default if \code{causal_weights = NULL}--estimates a pure causal effect where the
+#' instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling (e.g., Shapley values for \code{x_1}
+#' are based on the instance's true \code{x_2} and \code{x_3}). A weight of .5 is equivalent to the symmetric Shapley value
+#' calculation--within sampling error--and represents the case where the researcher is uncertain as to whether or not \code{x_2} and
+#' \code{x_3} causally precede or follow \code{x_1}.
+#' @param sample_size A numeric vector of length 1 giving the number of Monte Carlo samples used to compute the stochastic Shapley values for
+#' each feature.
+#' @param use_future Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel across \code{sample_size}.
+#' @return A data.frame with class \code{shapFlex} of the feature-level Shapley values for all instaces in \code{explain}.
 #' @importFrom magrittr %>%
 #' @importFrom rlang .data
 #' @export
@@ -83,7 +99,7 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
   #----------------------------------------------------------------------------
   if (!is.null(causal)) {
 
-    causal_formula <- lapply(causal, function(x){attributes(terms(x))$variables})
+    causal_formula <- lapply(causal, function(x){attributes(stats::terms(x))$variables})
     causal_formula <- lapply(causal_formula, function(x){as.character(x)[-1]})
 
     causal_target_all <- unlist(lapply(causal_formula, function(x){x[1]}))
@@ -106,7 +122,6 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     causal_effects <- "causal_target_not_in_target_features[j]"
   }
   #----------------------------------------------------------------------------
-  i <- j <- 1
   data_sample <- lapply_function(1:sample_size, function(i) {  # Loop over Monte Carlo samples.
 
     # Select a reference instance.
@@ -114,12 +129,6 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
 
     # Shuffle the column indices, keeping all column indices.
     feature_indices_random <- sample(1:n_features, size = n_features, replace = FALSE)
-
-    #feature_indices_random <- 1:ncol(explain)
-    #feature_indices_random <- c(feature_indices_random[c(16, 21)], feature_indices_random[-c(16, 21)])
-    #feature_indices_random <- c(feature_indices_random[c(21, 16)], feature_indices_random[-c(16, 21)])
-    #feature_indices_random <- c(feature_indices_random[-c(21)], feature_indices_random[c(21)])
-    #feature_indices_random <- c(feature_indices_random[-c(16, 21)], feature_indices_random[c(16, 21)])
 
     # Shuffle the column order for the randomly selected instance.
     reference_instance <- reference[reference_index, feature_indices_random, drop = FALSE]
@@ -333,10 +342,11 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
   data_shap <- predict_shapFlex(
     reference = reference,  # input arg.
     data_predict = data_predict,  # Calculated.
-    models = models,  # input arg.
+    model = model,  # input arg.
     predict_function = predict_function,  # input arg.
     n_features = n_features,  # Calculated.
     causal = causal,  # input arg.
+    causal_weights = causal_weights,  # input arg.
     causal_target = causal_target_all # Calculated.
   )
   #----------------------------------------------------------------------------

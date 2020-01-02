@@ -1,8 +1,8 @@
 
 # Internal prediction function. Used at the end of shapFlex::shapFlex().
 # Arguments are matched by position.
-predict_shapFlex <- function(reference, data_predict, models, predict_function,
-                             n_features, causal, causal_target) {
+predict_shapFlex <- function(reference, data_predict, model, predict_function,
+                             n_features, causal, causal_weights, causal_target) {
 
   data_model <- data_predict[, 1:n_features, drop = FALSE]
   data_meta <- data_predict[, (n_features + 1):ncol(data_predict), drop = FALSE]
@@ -93,7 +93,7 @@ predict_shapFlex <- function(reference, data_predict, models, predict_function,
 
   data_predicted <- dplyr::bind_rows(data_non_causal, data_causal)
 
-  data_predicted <- dplyr::select(data_predicted, index, sample, feature_name, causal, shap_effect)
+  data_predicted <- dplyr::select(data_predicted, .data$index, .data$sample, .data$feature_name, .data$causal, .data$shap_effect)
 
   # Final Shapley value calculation collapsed across Monte Carlo samples.
   data_predicted <- data_predicted %>%
