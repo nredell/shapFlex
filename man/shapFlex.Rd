@@ -2,49 +2,37 @@
 % Please edit documentation in R/shapFlex.R
 \name{shapFlex}
 \alias{shapFlex}
-\title{Compute stochastic feature-level Shapley values for ensemble models using potentially different input datasets}
+\title{Compute symmetric or asymmetric stochastic feature-level Shapley values}
 \usage{
-shapFlex(data, explain_instance = 1,
-  explain_instance_id = c("row_index", "row_name"), models,
-  predict_functions, dataset_weights = NULL, target_features = NULL,
-  sample_size = 60, shuffle = 1, use_future = FALSE,
-  keep_samples = FALSE)
+shapFlex(explain, reference = NULL, model, predict_function,
+  target_features = NULL, causal = NULL, causal_weights = NULL,
+  sample_size = 60, use_future = FALSE)
 }
 \arguments{
-\item{data}{A list of 1 or more dataframes that contain the instance/row to be explained.}
+\item{explain}{TBD}
 
-\item{explain_instance}{An integer that identifies the instance/row to be explained. If \code{length(data)} > 1 and the
-number of rows differ between datasets, a row name that idenftifies the target instance in each dataset that can be coerced
-to an integer with \code{as.integer(row.names(data))}.}
+\item{reference}{TBD}
 
-\item{explain_instance_id}{For finding the location of \code{explain_instance}. \code{row_index} is the dataset row number (default) or
-\code{row_name} if multiple datasets are used in an ensemble model.}
-
-\item{models}{A list containing a vector of 1 or more trained models. For models with 1 input dataset, the length of the
-list holding the model(s) is 1. For multiple input datasets, \code{models} is a nested list with length equal to length(data).}
-
-\item{predict_functions}{A list containing the user-specified dataset-specifc prediction function.
-The length of the list is equal to \code{length(data)}.}
-
-\item{dataset_weights}{Optional. A sum-to-one numeric vector with \code{length(data)} that weights the feature-level Shapley value combination across datasets.
-Only needed for ensemble models that predict with different datasets (length(data) > 1). The default value is a uniform weighting scheme.}
+\item{model}{TBD}
 
 \item{target_features}{Optional. A character vector of feature names in \code{data} for which Shapley values will be produced. For high-dimensional models, selecting a subset
 of interesting features may dramatically speed up computation time. The default value is to return feature effects for all features across all input datasets.}
 
-\item{sample_size}{The number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.}
+\item{causal}{TBD}
 
-\item{shuffle}{The number of times the features in each randomly selected comparison are shuffled. This is an explore, exploit parameter.}
+\item{causal_weights}{TBD}
+
+\item{sample_size}{The number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.}
 
 \item{use_future}{Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel.}
 
-\item{keep_samples}{= Boolean. If \code{TRUE}, the Monte Carlo sampling data is returned for \code{interaction()}.}
+\item{predict_functions}{TBD}
 }
 \value{
 A data.frame of the feature-level Shapley values for the target instance and selected features.
 }
 \description{
 This function uses user-defined trained models and prediction functions to compute approximate Shapley values for
-single models or ensemble models. Shapley values can be calculated for a subset of model features which reduces the
-typically expensive computation of approximate Shapley values in high-dimensional models or model ensembles.
+single models. Shapley values can be calculated for a subset of model features which reduces the
+typically expensive computation of approximate Shapley values in high-dimensional models.
 }

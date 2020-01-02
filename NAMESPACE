@@ -3,5 +3,4 @@
 export(r2)
 export(shapFlex)
 importFrom(magrittr,"%>%")
-importFrom(rlang,"!!")
 importFrom(rlang,.data)
