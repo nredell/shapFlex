@@ -4,23 +4,32 @@ Status](https://travis-ci.org/nredell/shapFlex.svg?branch=master)](https://travi
 
 # package::shapFlex <img src="./tools/shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
-The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values 
-for machine learning ensemble models using potentially different, high-dimensional input datasets. **[Shapley values](https://christophm.github.io/interpretable-ml-book/shapley.html)** are a great model-independent way to understand both **global feature importance** (when plotted like a [partial dependence plot](https://projecteuclid.org/download/pdf_1/euclid.aos/1013203451)) and instance/row-level **local feature importance** in black-box machine learning models. The main function in this package is `shapFlex::shapFlex()`.
+The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values which 
+can be used to (a) interpret and/or (b) assess the fairness of any machine learning model while 
+**incorporating causal constraints into the model's feature space**. **[Shapley values](https://christophm.github.io/interpretable-ml-book/shapley.html)** 
+are an intuitive and theoretically sound model-agnostic diagnostic tool to understand both **global feature importance** across all instances in a data set 
+and instance/row-level **local feature importance** in black-box machine learning models.
 
-This package implements a slight modification 
-of [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) to support Shapley value calculations for user-specified subsets of features.
+This package implements the algorithm described in 
+[Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) 
+to compute the stochastic Shapley values for a given model feature and the algorithm described in 
+[Frye, Feige, & Rowat's (2019) Asymmetric Shapley values: incorporating causal knowledge into model-agnostic explainability](https://arxiv.org/pdf/1910.06358.pdf) 
+to incorporate prior knowledge into the Shapley value calculation. Asymmetric Shapley values can be tuned by the researcher to avoid splitting 
+the Shapley feature effects uniformly across related/correlated features--as is done in the symmetric version--and focus on the unique effect of a target 
+feature after having conditioned on other pre-specified "causal" feature effects.
 
 * **Flexibility**: 
-    + Shapley values can be estimated for ensembles of <u>many machine learning models</u> using a simple user-defined 
+    + Shapley values can be estimated for <u>any machine learning model</u> using a simple user-defined 
     `predict()` wrapper function.
-    + Shapley values can be estimated for a given feature if it appears in <u>multiple datasets</u> in a more elaborate ensemble model.
-    + The Monte Carlo sampling algorithm supports explore, exploit capabilities: (1) many randomly sampled comparison instances with 
-    few feature shuffles or (2) few randomly sampled comparison instances with many feature shuffles.
+    + Shapley values can be estimated by incorporating prior knowledge about causaility in the feature space; this is especially 
+    useful for interpreting time series models with a temporal dependence.
 
 * **Speed**:
     + The code itself hasn't necessarily been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
     to <u>select 1 or more target features of interest</u> and avoid having to compute Shapley values for all model features. This is especially 
     useful in high-dimensional models as the computation of a Shapley value is exponential in the number of features.
+
+The main function in this package is `shapFlex::shapFlex()`.
 
 ***
 
