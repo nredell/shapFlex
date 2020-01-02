@@ -1,71 +1,63 @@
-#' Compute stochastic feature-level Shapley values for ensemble models using potentially different input datasets
+#' Compute symmetric or asymmetric stochastic feature-level Shapley values
 #'
 #' This function uses user-defined trained models and prediction functions to compute approximate Shapley values for
-#' single models or ensemble models. Shapley values can be calculated for a subset of model features which reduces the
-#' typically expensive computation of approximate Shapley values in high-dimensional models or model ensembles.
+#' single models. Shapley values can be calculated for a subset of model features which reduces the
+#' typically expensive computation of approximate Shapley values in high-dimensional models.
 #'
-#' @param data A list of 1 or more dataframes that contain the instance/row to be explained.
-#' @param explain_instance An integer that identifies the instance/row to be explained. If \code{length(data)} > 1 and the
-#' number of rows differ between datasets, a row name that idenftifies the target instance in each dataset that can be coerced
-#' to an integer with \code{as.integer(row.names(data))}.
-#' @param explain_instance_id For finding the location of \code{explain_instance}. \code{row_index} is the dataset row number (default) or
-#' \code{row_name} if multiple datasets are used in an ensemble model.
-#' @param models A list containing a vector of 1 or more trained models. For models with 1 input dataset, the length of the
-#' list holding the model(s) is 1. For multiple input datasets, \code{models} is a nested list with length equal to length(data).
-#' @param predict_functions A list containing the user-specified dataset-specifc prediction function.
-#' The length of the list is equal to \code{length(data)}.
-#' @param dataset_weights Optional. A sum-to-one numeric vector with \code{length(data)} that weights the feature-level Shapley value combination across datasets.
-#' Only needed for ensemble models that predict with different datasets (length(data) > 1). The default value is a uniform weighting scheme.
+#' @param explain TBD
+#' @param reference TBD
+#' @param model TBD
+#' @param predict_functions TBD
 #' @param target_features Optional. A character vector of feature names in \code{data} for which Shapley values will be produced. For high-dimensional models, selecting a subset
 #' of interesting features may dramatically speed up computation time. The default value is to return feature effects for all features across all input datasets.
+#' @param causal TBD
+#' @param causal_weights TBD
 #' @param sample_size The number of randomly selected comparison rows or instances used to compute the feature-level Shapley value.
-#' @param shuffle The number of times the features in each randomly selected comparison are shuffled. This is an explore, exploit parameter.
 #' @param use_future Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel.
-#' @param keep_samples = Boolean. If \code{TRUE}, the Monte Carlo sampling data is returned for \code{interaction()}.
 #' @return A data.frame of the feature-level Shapley values for the target instance and selected features.
 #' @importFrom magrittr %>%
-#' @importFrom rlang !!
 #' @importFrom rlang .data
 #' @export
-shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_index", "row_name"),
-                     models, predict_functions, dataset_weights = NULL, target_features = NULL,
-                     sample_size = 60, shuffle = 1, use_future = FALSE, keep_samples = FALSE) {
+shapFlex <- function(explain, reference = NULL, model, predict_function, target_features = NULL,
+                     causal = NULL, causal_weights = NULL, sample_size = 60, use_future = FALSE) {
 
-  # This function uses 1 internal function: predict_shapFlex.
-
-  if (!methods::is(data, "list")) {
-    stop("The 'data' argument needs to be a list of 1 or more data.frames.")
+  if (missing(explain) || !methods::is(explain, "data.frame")) {
+    stop("Enter a data.frame of 1 or more instances to explain.")
   }
 
-  if (is.null(explain_instance) || (!methods::is(as.integer(explain_instance), "integer") &&
-                                    length(explain_instance) == 1 && explain_instance >= 1)) {
-    stop("The 'explain_instance' argument needs to be a length 1 numeric vector >= 1 in value or coercible to one. 'explain_instance'
-         identifies the row number or as.integer(row.names(data)) for which Shapley values are calculated.")
+  if (!is.null(reference) && !methods::is(reference, "data.frame")) {
+    stop("Enter a data.frame of 1 or more instances as a reference group against which 'explain' will be compared.")
   }
 
-  # Set the default 'explain_instance' to a row index (i.e., row number) which assumes that all input datasets are the same number of rows.
-  explain_instance_id <- explain_instance_id[1]
-
-  if (!explain_instance_id %in% c("row_index", "row_name")) {
-    stop("The 'explain_instance_id' argument needs to be one of 'row_index' or 'row_name'.")
+  if (missing(model)) {
+    stop("Enter a prediction model with the 'model' argument.")
   }
 
-  if (is.null(sample_size) || sample_size < 1) {
-    stop("Set the 'sample_size' argument to be > 0.")
+  if (missing(predict_function)) {
+    stop("Enter a prediction function that works with the model from the 'model' argument.")
   }
 
-  # If not specified, use all unique features across all input datasets to explain the given instance's predictions.
+  if (!is.null(target_features) && any(!target_features %in% names(explain))) {
+    stop("All target features should be in names(explain).")
+  }
+
+  if (!is.null(causal) && !methods::is(causal, "list")) {
+    stop("Enter the 'causal' specifications as a list of formulas.")
+  }
+
+  if (!is.null(causal) && is.null(causal_weights)) {
+    causal_weights <- rep(1, length(causal))  # Default is to estimate a pure "causal" effect.
+  }
+
+  if (!is.null(causal) && length(causal) != length(causal_weights)) {
+    stop("Enter a length(causal) numeric vector of weights between 0 and 1; '1' estimates a pure 'causal' effect.")
+  }
+
   if (is.null(target_features)) {
-    target_features <- unique(unlist(lapply(data, names)))
+
+    target_features <- names(explain)  # Default is to explain with all features.
   }
-
-  # Filter out datasets that do not contain any 'target_features', potentially reducing the number of outer-most loops.
-  datasets_with_a_target_feature <- which(sapply(data, function(x) {any(target_features %in% names(x))}))
-
-  if (length(datasets_with_a_target_feature) == 0) {
-    stop("None of the 'target_features' appear as names in the input list of dataframes.")
-  }
-
+  #----------------------------------------------------------------------------
   if (isTRUE(use_future)) {
 
     lapply_function <- future.apply::future_lapply
@@ -74,190 +66,296 @@ shapFlex <- function(data, explain_instance = 1, explain_instance_id = c("row_in
 
     lapply_function <- base::lapply
   }
-
-  # Initialize an empty set of lists to match the number of input datasets; some may be NULL if they do not
-  # contain a target_feature, but this approach of keeping the NULL list slots makes the indexing clearer.
-  ensemble_feature_effects <- vector("list", length(data))
-
-  h <- 1
-  for (h in datasets_with_a_target_feature) {
-
-    # If 'explain_instance' is a row name, convert it to an index. This will allow us to compare the same instance
-    # across datasets with a different number of rows--think of datasets with lagged features having different nrow(data).
-    if (explain_instance_id == "row_name") {
-
-      explain_instance_index <- which(as.integer(row.names(data[[h]])) == explain_instance)  # convert row name to a row number.
-
-    } else {
-
-      explain_instance_index <- explain_instance  # row number in the dataset.
-    }
-
-    # If neither the converted 'row_name' to a row index for 'explain_instance' is in the dataset nor
-    # is the 'row_index' less than nrow(data), skip the Shapley sampling and return NULL.
-    if (length(explain_instance_index) != 0 && explain_instance_index <= nrow(data[[h]])) {
-
-      # Select the one row that we will explain using the 'target_features' of interest.
-      explain_instance_x <- data[[h]][explain_instance_index, , drop = FALSE]
-
-      # Total features in dataset; this can change across 'data' if length(data) > 1.
-      n_features <- ncol(data[[h]])
-
-      # Keep the names of the 'target_features' for column indexing between the input dataset column order and
-      # the shuffled column order.
-      target_features_in_dataset <- names(data[[h]])[names(data[[h]]) %in% target_features]
-
-      # How many of the target features are in this dataset; sets the duration of the inner-most apply function.
-      n_target_features <- length(target_features_in_dataset)
-
-      n_rows <- nrow(data[[h]])
-
-      i <- 1
-      data_feature_effects_by_sample <- lapply_function(1:sample_size, function(i) {
-
-        # Select one row, or row index, from the input dataset, excluding the target index.
-        row_index_random <- sample((1:n_rows)[-explain_instance_index], size = 1, replace = FALSE)
-
-        data_feature_effects_shuffle <- lapply(1:shuffle, function(pass) {
-
-          # Shuffle the column indices, keeping all column indices.
-          feature_indices_random <- sample(1:n_features, size = n_features, replace = FALSE)
-
-          # Shuffle the column order for the randomly selected row. Adjust sampling methodology to work
-          # with time-series data.
-          random_instance <- data[[h]][row_index_random, feature_indices_random, drop = FALSE]
-
-          # For the target row that is selected, shuffle the columns to match our randomly selected and shuffled instance.
-          target_instance <- explain_instance_x[, feature_indices_random, drop = FALSE]
-
-          # Each randomly sampled and shuffled comparison instance will isolate the effect of each target_feature:
-          # This lapply() reutrns a 1 sample * n_target_features list.
-          j <- 1
-          data_feature_effects_sample_i <- lapply(1:n_target_features, function(j) {
-
-            # For each feature in the loop, find the position or index of the shuffled column.
-            feature_index <- which(names(data[[h]])[feature_indices_random] == target_features_in_dataset[j])
-
-            # This is our target instance, shuffled.
-            target_instance_with_feature <- target_instance
-
-            # If the shuffled feature is not in the last column, replace columns (feature_index + 1):(n_features)
-            # in the target instance with the same columns from our randomly selected instance.
-            if (feature_index <= (n_features - 1)) {
-
-              target_instance_with_feature[, (feature_index + 1):(n_features)] <- random_instance[, (feature_index + 1):(n_features), drop = FALSE]
-            }
-
-            # Now, we'll take our target instance with the (feature_index + 1):(n_features) shuffled columns
-            # and replace our current target feature in this loop to get a comparison instance that only
-            # differs with respect to the current target feature.
-            target_instance_without_feature <- target_instance_with_feature
-            target_instance_without_feature[, feature_index] <- random_instance[, feature_index]
-
-            # Re-order the datasets to match the data input for the user-defined predict() function.
-            # We'll also add a group identifier so that we can calculate the marginal effect of each
-            # predictor with a group_by() function.
-            target_instance_with_feature <- target_instance_with_feature[, order(feature_indices_random), drop = FALSE]
-            target_instance_without_feature <- target_instance_without_feature[, order(feature_indices_random), drop = FALSE]
-
-            data_target_instance <- dplyr::bind_rows(list(target_instance_with_feature, target_instance_without_feature))
-
-            # Save the output data.frame to our list.
-            data_target_instance$sample <- i
-
-            # target_cols <- which(names(data[[h]]) %in% names(data[[h]])[feature_indices_random[1:feature_index]])
-            # comparison_cols <- (1:n_features)[!1:n_features %in% target_cols]
-            # data_target_instance$target_cols <- list(target_cols)
-            # if (length(comparison_cols) == 0) {
-            #
-            #   data_target_instance$comparison_cols <- list(0)
-            #
-            # } else {
-            #
-            #   data_target_instance$comparison_cols <- list(comparison_cols)
-            # }
-
-            data_target_instance
-          })  # End 'j' loop over model/target features.
-
-          data_out <- dplyr::bind_rows(data_feature_effects_sample_i)
-
-          data_out$shuffle <- pass
-
-          data_out
-        })  # End 'pass' loop of multiple shuffles between the target instance and the same random instance.
-
-        dplyr::bind_rows(data_feature_effects_shuffle)
-      })  # End 'i' loop over randomly sampled instances.
-
-      # Collapse the sample-level dataset to get a dataset with n_samples * n_features * 2 rows.
-      ensemble_feature_effects[[h]] <- dplyr::bind_rows(data_feature_effects_by_sample)
-
-      # 'feature_static' represents the column-shuffled target instance with the unchanged feature of interest; 'feature_dynamic'
-      # represents the column-shuffled comparison instance that only differs with respect to the feature of interest.
-      ensemble_feature_effects[[h]]$feature_group <- rep(c('feature_static', 'feature_random'), n_target_features * sample_size * shuffle)
-      ensemble_feature_effects[[h]]$feature_name <- rep(rep(target_features_in_dataset, each = 2), sample_size * shuffle)
-
-      ensemble_feature_effects[[h]]$dataset <- h
-      ensemble_feature_effects[[h]]$explained_instance <- explain_instance  # function argument: row_index or row.name
-
-    } else {
-
-      ensemble_feature_effects[[h]] <- NULL  # The instance to explain was not in the dataset.
-    }
-  }  # End 'h' loop over datasets if multiple datasets are provided.
-
-  if (all(unlist(lapply(ensemble_feature_effects, is.null)))) {
-    stop("No Shapley values were returned; the likely cause is that 'explain_instance' is not in any of the input datasets.")
-  }
-
   #----------------------------------------------------------------------------
-  # shapFlex:::predict_shapFlex.
-  data_out <- predict_shapFlex(models = models, data = data, data_feature_effects = ensemble_feature_effects,
-                               predict_functions = predict_functions, dataset_weights = dataset_weights, keep_samples = keep_samples)
+  n_features <- ncol(explain)
 
-  # If keep_samples is TRUE, those will be return()ed as an attribute.
-  if (isTRUE(keep_samples)) {
-
-    data_samples <- attributes(data_out)$data_samples
-    attr(data_out, "data_samples") <- NULL
-  }
-
+  n_target_features <- length(target_features)
   #----------------------------------------------------------------------------
-  # Add the feature values if only one input dataset is present. To-do: expand this to multiple datasets with
-  # the potential of the same feature name having different values across datasets.
-  if (length(data) == 1) {
+  if (is.null(reference)) {  # Default is to explain all instances in 'explain'.
 
-    data_merge <- data[[1]]
-
-    if (explain_instance_id == "row_index") {
-
-      data_merge$explained_instance <- 1:nrow(data_merge)
-
-    } else {
-
-      data_merge$explained_instance <- as.numeric(row.names(data_merge))
-    }
-
-    # Melt the data.frame for merging. Suppress the warning of factors and numeric features being
-    # combined into one 'feature_value' column and coerced to characters.
-    data_merge <- suppressWarnings(tidyr::gather(data_merge, key = "feature_name", value = "feature_value", -.data$explained_instance))
-
-    data_out <- dplyr::left_join(data_out, data_merge, by = c("explained_instance", "feature_name"))
-
-    # Re-order columns.
-    data_out <- as.data.frame(dplyr::select(data_out, .data$explained_instance, .data$feature_name,
-                                            .data$feature_value, .data$shap_effect, .data$shap_effect_sd))
-  }
-
-  if (isTRUE(keep_samples)) {
-
-    attr(data_out, "data_samples") <- data_samples
-
-    return(data_out)
+    reference <- explain
+    n_instances <- nrow(reference)
 
   } else {
 
-    return(data_out)
+    n_instances <- nrow(reference)
   }
+  #----------------------------------------------------------------------------
+  if (!is.null(causal)) {
+
+    causal_formula <- lapply(causal, function(x){attributes(terms(x))$variables})
+    causal_formula <- lapply(causal_formula, function(x){as.character(x)[-1]})
+
+    causal_target_all <- unlist(lapply(causal_formula, function(x){x[1]}))
+    causal_effects_all <- lapply(causal_formula, function(x){x[-1]})
+
+    # shapFlex currently only supports unduplicated endogenous targets.
+    if (any(duplicated(unlist(causal_target_all)))) {
+      stop("Remove formulas from 'causal' with duplicate endogenous/outcome features e.g., list(y ~ x1, y ~ x2).")
+    }
+
+    if (any(!unlist(causal_target_all) %in% target_features)) {
+      stop("One or more of the endogenous/outcome features from 'causal' is not in 'target_features'.")
+    }
+
+  } else {  # Set to avoid errors in several if() statements. To-do: clean this up.
+
+    causal_target_all <- "causal_target_not_in_target_features[j]"
+    causal_effects_all <- "causal_target_not_in_target_features[j]"
+    causal_target <- "causal_target_not_in_target_features[j]"
+    causal_effects <- "causal_target_not_in_target_features[j]"
+  }
+  #----------------------------------------------------------------------------
+  i <- j <- 1
+  data_sample <- lapply_function(1:sample_size, function(i) {  # Loop over Monte Carlo samples.
+
+    # Select a reference instance.
+    reference_index <- sample(1:n_instances, size = 1, replace = FALSE)
+
+    # Shuffle the column indices, keeping all column indices.
+    feature_indices_random <- sample(1:n_features, size = n_features, replace = FALSE)
+
+    #feature_indices_random <- 1:ncol(explain)
+    #feature_indices_random <- c(feature_indices_random[c(16, 21)], feature_indices_random[-c(16, 21)])
+    #feature_indices_random <- c(feature_indices_random[c(21, 16)], feature_indices_random[-c(16, 21)])
+    #feature_indices_random <- c(feature_indices_random[-c(21)], feature_indices_random[c(21)])
+    #feature_indices_random <- c(feature_indices_random[-c(16, 21)], feature_indices_random[c(16, 21)])
+
+    # Shuffle the column order for the randomly selected instance.
+    reference_instance <- reference[reference_index, feature_indices_random, drop = FALSE]
+
+    # For the instances to be explained, shuffle the columns to match the randomly selected and shuffled instance.
+    explain_instances <- explain[, feature_indices_random, drop = FALSE]
+
+    data_sample_feature <- lapply(1:n_target_features, function(j) {  # Loop over features per Monte Carlo sample.
+
+      # For each feature in the loop, find the position or index of the shuffled column. This index is the pivot point/column
+      # that separates the real instance (to the left) from the random instance (to the right).
+      target_feature_index <- which(names(explain) == target_features[j])
+      target_feature_index_shuffled <- which(names(explain)[feature_indices_random] == target_features[j])
+
+      # If there are any causal specifications, select the formula where the outcome matches the target feature.
+      if (any(causal_target_all %in% target_features[j])) {
+
+        causal_target <- causal_target_all[which(causal_target_all == target_features[j])]
+        causal_effects <- unlist(causal_effects_all[which(causal_target_all == target_features[j])])
+
+      } else {
+
+        causal_target <- "causal_target_not_in_target_features[j]"
+        causal_effects <- "causal_target_not_in_target_features[j]"
+      }
+      #------------------------------------------------------------------------
+      # Re-order shuffled column indices for causal analysis. The purpose is to shift the index of
+      # the target feature closer to the middle of the feature index vector to give enough room to
+      # place N causal effects to the left (real exogenous effects/features that are conditioned on) and
+      # right (fake exogenous effects/features that are not conditioned on) of the target index. The actual
+      # shifting of the effects indices happens immediately after this 'if (...)' statement.
+      if (causal_target %in% target_features[j]) {
+
+        # Find the location of all causal effects in the shuffled feature index vector.
+        effects_indices <- which(names(explain) %in% causal_effects)
+        # Used to move the effects to the left and right of the causal target pivot point.
+        effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
+
+        # If the endogenous causal target is too close to the beginning of the shuffled feature index vector,
+        # move it to position 1 + length(causal_effects) and place the effect indices
+        if (target_feature_index_shuffled <= length(causal_effects)) {
+
+          # Make enough room to place all causal effects to the left of the pivot point to test the real effects.
+          target_feature_index_shuffled_original <- target_feature_index_shuffled
+          target_feature_index_shuffled_shifted <- 1 + length(causal_effects)
+
+          # Swap indices: Move the target feature closer to the middle and take the feature index that the
+          # shifted target is about to replace and put it where the target feature was original. A simple swap.
+          feature_index_overwritten_by_target <- feature_indices_random[target_feature_index_shuffled_shifted]
+          feature_indices_random[target_feature_index_shuffled_shifted] <- target_feature_index
+          feature_indices_random[target_feature_index_shuffled_original] <- feature_index_overwritten_by_target
+
+          # Overwrite for use later in this function: This is the pivot point between real and fake features.
+          target_feature_index_shuffled <- target_feature_index_shuffled_shifted
+
+          # Used to move the effects to the left and right of the causal target pivot point.
+          effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
+
+        } else if (target_feature_index_shuffled > (n_features - length(causal_effects))) {
+
+          # Make enough room to place all causal effects to the right of the pivot point to test the fake effects.
+          target_feature_index_shuffled_original <- target_feature_index_shuffled
+          target_feature_index_shuffled_shifted <- n_features - length(causal_effects)
+
+          # Swap indices: Move the target feature closer to the middle and take the feature index that the
+          # shifted target is about to replace and put it where the target feature was original. A simple swap.
+          feature_index_overwritten_by_target <- feature_indices_random[target_feature_index_shuffled_shifted]
+          feature_indices_random[target_feature_index_shuffled_shifted] <- target_feature_index
+          feature_indices_random[target_feature_index_shuffled_original] <- feature_index_overwritten_by_target
+
+          # Overwrite for use later in this function: This is the pivot point between real and fake features.
+          target_feature_index_shuffled <- target_feature_index_shuffled_shifted
+
+          # Used to move the effects to the left and right of the causal target pivot point.
+          effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
+        }  # End feature index shuffling to accomodate N causal effects.
+        #----------------------------------------------------------------------
+        # Move the feature indices for the causal effects to the left (real) and right (fake) of the target
+        # feature in the shuffled feature index vector so that when the Frankenstein instance is made by
+        # concatenating the instance to be explained with a random reference instance, the correct
+        # features are either conditioned on (left/real) or marginalized (right/fake).
+        feature_indices_random_real_effects <- c(feature_indices_random[effects_indices_shuffled], feature_indices_random[-(effects_indices_shuffled)])
+        feature_indices_random_fake_effects <- c(feature_indices_random[-(effects_indices_shuffled)], feature_indices_random[effects_indices_shuffled])
+
+        # The target feature may be at different positions in the shuffled feature index vector depending
+        # on whether or not it was shifted closer to the middle to accomodate N causal effects. As a result,
+        # the target feature pivot point needs to be tracked separately for both real- and fake-effects
+        # Frankenstein instances.
+        target_feature_index_shuffled_real_effects <- which(feature_indices_random_real_effects == target_feature_index)
+        target_feature_index_shuffled_fake_effects <- which(feature_indices_random_fake_effects == target_feature_index)
+      }  # End causal feature index setup.
+      #------------------------------------------------------------------------
+      # Create the Frankenstein instances: a combination of the instance to be explained with the
+      # reference instance to create a new instance that [likely] does not exist in the dataset.
+      if (!causal_target %in% target_features[j]) {  # Symmetric Shapley: non-causal target feature.
+
+        # These instances have the real target feature under investigation and everything to the right is
+        # from the random reference instance.
+
+        # Initialize the instances to be explained.
+        explain_instance_with_target_feature <- explain_instances
+
+        # Only create a Frankenstein instance if the target is not the last feature and there is actually
+        # one or more features to the right of the target to replace with the reference.
+        if (target_feature_index_shuffled < n_features) {
+
+          explain_instance_with_target_feature[, (target_feature_index_shuffled + 1):(n_features)] <- reference_instance[, (target_feature_index_shuffled + 1):(n_features), drop = FALSE]
+        }
+
+        # These instances are otherwise the same as the Frankenstein instance created above with the
+        # exception that the target feature is now replaced with the target feature in the random reference
+        # instance. The difference in model predictions between these two Frankenstein instances is
+        # what gives us the stochastic Shapley value approximation.
+        explain_instance_without_target_feature <- explain_instance_with_target_feature
+        explain_instance_without_target_feature[, target_feature_index_shuffled] <- reference_instance[, target_feature_index_shuffled]
+
+      } else {  # Asymmetric Shapley: causal target feature.
+
+        reference_instance_real_effects <- reference[reference_index, feature_indices_random_real_effects, drop = FALSE]
+        reference_instance_fake_effects <- reference[reference_index, feature_indices_random_fake_effects, drop = FALSE]
+
+        # These instances have the real target feature under investigation and everything to the right is
+        # from the random reference instance.
+
+        # Initialize the instances to be explained.
+        explain_instance_with_feature_real_effects <- explain[, feature_indices_random_real_effects, drop = FALSE]
+        explain_instance_with_feature_fake_effects <- explain[, feature_indices_random_fake_effects, drop = FALSE]
+
+        # Only create a Frankenstein instance if the target is not the last feature and there is actually
+        # one or more features to the right of the target to replace with the reference.
+        if (target_feature_index_shuffled_real_effects < n_features) {
+          explain_instance_with_feature_real_effects[, (target_feature_index_shuffled_real_effects + 1):(n_features)] <- reference_instance_real_effects[, (target_feature_index_shuffled_real_effects + 1):(n_features), drop = FALSE]
+        }
+
+        if (target_feature_index_shuffled_fake_effects < n_features) {
+          explain_instance_with_feature_fake_effects[, (target_feature_index_shuffled_fake_effects + 1):(n_features)] <- reference_instance_fake_effects[, (target_feature_index_shuffled_fake_effects + 1):(n_features), drop = FALSE]
+        }
+
+        # These instances are otherwise the same as the Frankenstein instances created above with the
+        # exception that the target feature is now replaced with the target feature in the random reference
+        # instance. The difference in model predictions between these four Frankenstein instances is
+        # what gives us the stochastic Shapley value approximation. These four instances represent the four
+        # instances in eqn. 14 in https://arxiv.org/pdf/1910.06358.pdf.
+        explain_instance_without_feature_real_effects <- explain_instance_with_feature_real_effects
+        explain_instance_without_feature_real_effects[, target_feature_index_shuffled_real_effects] <- reference_instance_real_effects[, target_feature_index_shuffled_real_effects]
+
+        explain_instance_without_feature_fake_effects <- explain_instance_with_feature_fake_effects
+        explain_instance_without_feature_fake_effects[, target_feature_index_shuffled_fake_effects] <- reference_instance_fake_effects[, target_feature_index_shuffled_fake_effects]
+      }  # End Frankenstein
+      #------------------------------------------------------------------------
+      # Reset the randomly shuffled features in the Frankenstein instances so that they are in the
+      # correct/original order from the user-defined predict() function.
+      # We'll also add meta-data so that instance-level Shapley values can be calculated with dplyr::group_by().
+      if (!causal_target %in% target_features[j]) {  # Symmetric Shapley: non-causal target feature.
+
+        explain_instance_with_target_feature <- explain_instance_with_target_feature[, order(feature_indices_random), drop = FALSE]
+        explain_instance_without_target_feature <- explain_instance_without_target_feature[, order(feature_indices_random), drop = FALSE]
+
+        data_explain_instance <- dplyr::bind_rows(list(explain_instance_with_target_feature, explain_instance_without_target_feature))
+
+        data_explain_instance$index <- rep(1:nrow(explain), 2)  # Two Frankenstein instances per explained instance.
+
+        data_explain_instance$feature_group <- rep(c('feature_static', 'feature_random'), each = nrow(explain))
+
+        data_explain_instance$feature_name <- target_features[j]
+
+        #data_explain_instance$causal_effects <- list(NA)
+
+        data_explain_instance$causal <- 0
+
+      } else {  # Asymmetric Shapley: causal target feature.
+
+        explain_instance_with_feature_real_effects <- explain_instance_with_feature_real_effects[, order(feature_indices_random_real_effects), drop = FALSE]
+        explain_instance_with_feature_fake_effects <- explain_instance_with_feature_fake_effects[, order(feature_indices_random_fake_effects), drop = FALSE]
+        explain_instance_without_feature_real_effects <- explain_instance_without_feature_real_effects[, order(feature_indices_random_real_effects), drop = FALSE]
+        explain_instance_without_feature_fake_effects <- explain_instance_without_feature_fake_effects[, order(feature_indices_random_fake_effects), drop = FALSE]
+
+        data_explain_instance <- dplyr::bind_rows(list(explain_instance_with_feature_real_effects,
+                                                       explain_instance_with_feature_fake_effects,
+                                                       explain_instance_without_feature_real_effects,
+                                                       explain_instance_without_feature_fake_effects))
+
+        data_explain_instance$index <- rep(1:nrow(explain), 4)  # Four Frankenstein instances per explained instance.
+
+        data_explain_instance$feature_group <- rep(c('feature_static_real_effects', 'feature_static_fake_effects',
+                                                     'feature_random_real_effects', 'feature_random_fake_effects'),
+                                                   each = nrow(explain))
+
+        data_explain_instance$feature_name <- target_features[j]
+
+        #data_explain_instance$causal_effects <- list(t(eval(causal_effects)))
+
+        data_explain_instance$causal <- 1
+      }
+      #------------------------------------------------------------------------
+      data_explain_instance$sample <- i
+
+      data_explain_instance
+    })  # End 'j' loop for data_sample_feature.
+    #--------------------------------------------------------------------------
+    data_sample_feature <- dplyr::bind_rows(data_sample_feature)
+
+    data_sample_feature
+  })  # End 'i' loop for data_sample.
+  #----------------------------------------------------------------------------
+  # Put all Frankenstein instances from all instances passed in 'explain' into
+  # a single data.frame for the user-defined predict() function.
+  data_predict <- dplyr::bind_rows(data_sample)
+
+  # shapFlex internal function to compute the final symmetric and/or asymmetric Shapley values.
+  data_shap <- predict_shapFlex(
+    reference = reference,  # input arg.
+    data_predict = data_predict,  # Calculated.
+    models = models,  # input arg.
+    predict_function = predict_function,  # input arg.
+    n_features = n_features,  # Calculated.
+    causal = causal,  # input arg.
+    causal_target = causal_target_all # Calculated.
+  )
+  #----------------------------------------------------------------------------
+  # Melt the input 'explain' data.frame for merging the model features to the Shapley values. Suppress
+  # the warning resulting from any factors and numeric features being combined into one 'feature_value'
+  # column and coerced to characters.
+  data_merge <- suppressWarnings(tidyr::gather(explain, key = "feature_name", value = "feature_value"))
+
+  data_merge$index <- rep(1:nrow(explain), n_features)  # The merge index for each instance.
+
+  # Each instance in explain has one Shapley value per instance in a long data.frame format.
+  data_out <- dplyr::left_join(data_shap, data_merge, by = c("index", "feature_name"))
+
+  # Re-order columns for easier reading.
+  data_out <- as.data.frame(dplyr::select(data_out, .data$index, .data$feature_name,
+                                          .data$feature_value, .data$shap_effect, .data$shap_effect_sd,
+                                          .data$intercept))
+
+  class(data_out) <- c("shapFlex", class(data_out))
+
+  return(data_out)
 }
