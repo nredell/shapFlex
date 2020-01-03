@@ -15,16 +15,6 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
   # Returns a length 1 numeric vector of the average prediction--i.e., intercept--from the reference group.
   intercept <- mean(predict_function(model, reference)[, 1], na.rm = TRUE)
   #--------------------------------------------------------------------------
-  # Return the sampling predictions if requested by the user.
-  # if (isTRUE(keep_samples)) {
-  #
-  #   data_predicted <- dplyr::bind_cols(data_predict, data_predicted)
-  #
-  # } else {
-  #
-  #   data_predicted <- dplyr::bind_cols(data_meta, data_predicted)
-  # }
-  #--------------------------------------------------------------------------
   # Cast the data.frame to, for each random sample, take the difference between the Frankenstein
   # instances which are now in six columns: two for symmetric and four for asymmetric.
   user_fun_y_pred_name <- names(data_predicted)[ncol(data_predicted)]
@@ -86,6 +76,7 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
       stats::weighted.mean(data_shap_asym[i, c("shap_u_2_12", "shap_u_2_21")], c(data_shap_asym$weight_12[i], data_shap_asym$weight_21[i]), na.rm = TRUE)
     }))
 
+    #data_shap_asym$shap_effect <- shap_u_2
     # Shapley value for each Monte Carlo sample for each instance.
     data_causal$shap_effect <- shap_u_2
   }  # End asymmetric causal Shapley value calculations per Monte Carlo sample.

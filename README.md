@@ -2,6 +2,8 @@
 [![Travis Build Status](https://travis-ci.org/nredell/shapFlex.svg?branch=master)](https://travis-ci.org/nredell/shapFlex)
                                                                                
 # package::shapFlex <img src="./tools/shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
+
+**THIS PACKAGE IS UNDERGOING AN ACTIVE REWRITE. I'LL REMOVE THIS NOTE WHEN IT'S TESTED AND 100% WORKING AGAIN.**
                                                                                
 The purpose of `shapFlex`, short for Shapley flexibility, is to compute stochastic feature-level Shapley values which 
 can be used to (a) interpret and/or (b) assess the fairness of any machine learning model while 

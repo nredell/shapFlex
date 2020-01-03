@@ -338,6 +338,8 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
   # a single data.frame for the user-defined predict() function.
   data_predict <- dplyr::bind_rows(data_sample)
 
+  #data_predict <- dplyr::filter(data_predict, index == 1  & causal == 1)
+
   # shapFlex internal function to compute the final symmetric and/or asymmetric Shapley values.
   data_shap <- predict_shapFlex(
     reference = reference,  # input arg.
