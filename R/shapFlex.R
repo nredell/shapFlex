@@ -18,15 +18,15 @@
 #' For high-dimensional models, selecting a subset of interesting features may dramatically speed up computation time. The default behavior is
 #' to return Shapley values for all instances and features in \code{explain}.
 #' @param causal Optional. A list of 1 or more formulas that specify a causal direction for computing asymmetric Shapley values. For example,
-#' \code{list(x_1 ~ x_2 + x_3)} or \code{list(formula(x_1 ~ x_2 + x_3))} computes Shapley values for \code{x_1} after conditioning on
-#' the true/actual values of \code{x_2} and \code{x_3} for the instance being explained. Only 1 feature is allowed on the left hand side
+#' \code{list(x1 ~ x2 + x3)} or \code{list(formula(x1 ~ x2 + x3))} computes Shapley values for \code{x_1} after conditioning on
+#' the true/actual values of \code{x2} and \code{x3} for the instance being explained. Only 1 feature is allowed on the left hand side
 #' of the formula, and only 1 formula is allowed per left hand side feature i.e., no duplicated causal constraints for a target feature.
 #' @param causal_weights Optional. A numeric vector of \code{length(causal)} with weights between 0 and 1 that specifies the strength of
 #' the causal asymmetric Shapley values. A weight of 1--the default if \code{causal_weights = NULL}--estimates a pure causal effect where the
-#' instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling (e.g., Shapley values for \code{x_1}
-#' are based on the instance's true \code{x_2} and \code{x_3}). A weight of .5 is equivalent to the symmetric Shapley value
-#' calculation--within sampling error--and represents the case where the researcher is uncertain as to whether or not \code{x_2} and
-#' \code{x_3} causally precede or follow \code{x_1}.
+#' instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling (e.g., Shapley values for \code{x1}
+#' are based on the instance's true \code{x2} and \code{x3}). A weight of .5 is equivalent to the symmetric Shapley value
+#' calculation--within sampling error--and represents the case where the researcher is uncertain as to whether or not \code{x2} and
+#' \code{x_3} causally precede or follow \code{x1}.
 #' @param sample_size A numeric vector of length 1 giving the number of Monte Carlo samples used to compute the stochastic Shapley values for
 #' each feature.
 #' @param use_future Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel across \code{sample_size}.
@@ -102,17 +102,87 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     causal_formula <- lapply(causal, function(x){attributes(stats::terms(x))$variables})
     causal_formula <- lapply(causal_formula, function(x){as.character(x)[-1]})
 
-    causal_target_all <- unlist(lapply(causal_formula, function(x){x[1]}))
+    causal_target_all <- lapply(causal_formula, function(x){x[1]})
     causal_effects_all <- lapply(causal_formula, function(x){x[-1]})
 
     # shapFlex currently only supports unduplicated endogenous targets.
     if (any(duplicated(unlist(causal_target_all)))) {
-      stop("Remove formulas from 'causal' with duplicate endogenous/outcome features e.g., list(y ~ x1, y ~ x2).")
+      stop("Remove formulas from 'causal' with duplicate endogenous/outcome features e.g., list(x1 ~ x2, x1 ~ x3).")
     }
 
     if (any(!unlist(causal_target_all) %in% target_features)) {
       stop("One or more of the endogenous/outcome features from 'causal' is not in 'target_features'.")
     }
+    #--------------------------------------------------------------------------
+    # Users are only asked to enter causal 1 weights per formula. However,
+    # weights need to be calculated for the causal effects to satisfy the sum constraint on the
+    # Shapley values equaling the model preictions (i.e., more than just the target needs to be
+    # adjusted with asymmetric Shapley values). Causal targets, then, are also effects. The math should
+    # be spelled out in a vignette, but, roughly, the following setup of list(x1 ~ x2, x2 ~ x1) with
+    # causal weights of 1 and 1 in the function call should result in causal weights of .5 and .5
+    # using the code below.
+    target_weights <- lapply(causal_target_all, data.frame)
+    effect_weights <- lapply(causal_effects_all, data.frame)
+
+    target_weights <- lapply(seq_along(target_weights), function(i) {
+      names(target_weights[[i]]) <- "feature_name"
+      target_weights[[i]]$feature_name <- as.character(target_weights[[i]]$feature_name)
+      target_weights[[i]]$weight_12 <- causal_weights[i]
+      target_weights[[i]]$weight_21 <- 1 - causal_weights[i]
+      target_weights[[i]]
+    })
+
+    effect_weights <- lapply(seq_along(causal_effects_all), function(i) {
+      names(effect_weights[[i]]) <- "feature_name"
+      effect_weights[[i]]$feature_name <- as.character(effect_weights[[i]]$feature_name)
+      effect_weights[[i]]$weight_12 <- causal_weights[i]
+      effect_weights[[i]]$weight_21 <- 1 - causal_weights[i]
+      effect_weights[[i]]
+      })
+
+    combined_weights <- dplyr::bind_rows(target_weights, effect_weights)
+
+    # This dataset is passed into predict_shapFlex in zzz.R and used to compute the asymmetric
+    # Shapley values in eqn 1.
+    combined_weights <- combined_weights %>%
+      dplyr::group_by(feature_name) %>%
+      dplyr::summarize("weight_12" = mean(weight_12, na.rm = TRUE),
+                       "weight_21" = mean(weight_21, na.rm = TRUE))
+    #--------------------------------------------------------------------------
+
+    causal_effects_unique <- unique(unlist(causal_effects_all))  # We need unduplicated outcomes.
+    causal_effects_unique <- causal_effects_unique[causal_effects_unique %in% target_features]  # Estimate select effects.
+    causal_effects_unique <- causal_effects_unique[!causal_effects_unique %in% unique(unlist(causal_target_all))]  # Drop effects that are already outcomes.
+    causal_effects_unique <- sapply(causal_effects_unique, as.list)
+
+    # For each causal effect, find all of the causal targets that it is an effect of. The collection
+    # of these causal targets will become causal effects.
+    map_of_causal_targets_per_effect <- lapply(seq_along(unlist(causal_effects_unique)), function(i) {
+      effect_in_formulas <- lapply(seq_along(causal_effects_all), function(j) {
+        unlist(causal_effects_unique)[i] %in% causal_effects_all[[j]]
+      })
+      effect_in_formulas <- which(unlist(effect_in_formulas))
+    })
+
+    # This is the list of causal targets that each effect was paired with in the 'causal' input arg.
+    new_causal_effects <- lapply(seq_along(map_of_causal_targets_per_effect), function(i) {
+      unlist(causal_target_all[map_of_causal_targets_per_effect[[i]]])
+    })
+
+    # The causal effects need to be transformed into targets to get weighted properly when they are
+    # on the right hand side of a causal formula. This focus is due to the fact that Shapley values
+    # sum to the overall model prediction and if one Shapley value goes up another must go down.
+    causal_target_all <- append(causal_target_all, causal_effects_unique)
+    causal_target_all <- unlist(causal_target_all)
+
+    # Add a list of causal effects to the newly created formulas where the causes have been transformed
+    # to be endogenous.
+    causal_effects_all <- append(causal_effects_all, new_causal_effects)
+
+    # The length of the 'j' loop over features where Shapley values are calculated needs to be expanded
+    # to account for the estimates of any causal effects that (a) aren't already endogenous and (b) are listed
+    # as a target feature in the function call.
+    n_target_features <- length(causal_target_all)
 
   } else {  # Set to avoid errors in several if() statements. To-do: clean this up.
 
@@ -120,9 +190,10 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     causal_effects_all <- "causal_target_not_in_target_features[j]"
     causal_target <- "causal_target_not_in_target_features[j]"
     causal_effects <- "causal_target_not_in_target_features[j]"
+    causal_effects_targets <- "causal_target_not_in_target_features[j]"
   }
   #----------------------------------------------------------------------------
-  data_sample <- lapply_function(1:sample_size, function(i) {  # Loop over Monte Carlo samples.
+  data_sample <- lapply(1:sample_size, function(i) {  # Loop over Monte Carlo samples.
 
     # Select a reference instance.
     reference_index <- sample(1:n_instances, size = 1, replace = FALSE)
@@ -136,7 +207,7 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     # For the instances to be explained, shuffle the columns to match the randomly selected and shuffled instance.
     explain_instances <- explain[, feature_indices_random, drop = FALSE]
 
-    data_sample_feature <- lapply(1:n_target_features, function(j) {  # Loop over features per Monte Carlo sample.
+    data_sample_feature <- lapply_function(1:n_target_features, function(j) {  # Loop over features per Monte Carlo sample.
 
       # For each feature in the loop, find the position or index of the shuffled column. This index is the pivot point/column
       # that separates the real instance (to the left) from the random instance (to the right).
@@ -144,9 +215,11 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
       target_feature_index_shuffled <- which(names(explain)[feature_indices_random] == target_features[j])
 
       # If there are any causal specifications, select the formula where the outcome matches the target feature.
+      # Note that a target feature may be endogenous or exogenous--both need to be adjust for asymmetric calculations.
       if (any(causal_target_all %in% target_features[j])) {
 
         causal_target <- causal_target_all[which(causal_target_all == target_features[j])]
+        # Find the list of causal effects that matches the causal feature in this 'j' loop.
         causal_effects <- unlist(causal_effects_all[which(causal_target_all == target_features[j])])
 
       } else {
@@ -162,7 +235,8 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
       # shifting of the effects indices happens immediately after this 'if (...)' statement.
       if (causal_target %in% target_features[j]) {
 
-        # Find the location of all causal effects in the shuffled feature index vector.
+        # Find the location of all causal effects in the shuffled feature index vector. For causal effects
+        # where asymmetric Shapley values have been requested, the placeholder feature is ".".
         effects_indices <- which(names(explain) %in% causal_effects)
         # Used to move the effects to the left and right of the causal target pivot point.
         effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
@@ -295,9 +369,9 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
 
         data_explain_instance$feature_name <- target_features[j]
 
-        #data_explain_instance$causal_effects <- list(NA)
-
         data_explain_instance$causal <- 0
+
+        data_explain_instance$causal_type <- NA
 
       } else {  # Asymmetric Shapley: causal target feature.
 
@@ -319,9 +393,18 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
 
         data_explain_instance$feature_name <- target_features[j]
 
-        #data_explain_instance$causal_effects <- list(t(eval(causal_effects)))
-
         data_explain_instance$causal <- 1
+
+        # From eqn 16, asymmetric Shapley values for causal targets (shap_u_2) and causal effects (shap_u_1)
+        # are calculated differently--calculations are in predict_shapFlex().
+        if (j <= length(causal)) {
+
+          data_explain_instance$causal_type <- "causal_target"  # Left hand side of the user input formulas.
+
+        } else {
+
+          data_explain_instance$causal_type <- "causal_effect"  # Right hand side of the user input formulas.
+        }
       }
       #------------------------------------------------------------------------
       data_explain_instance$sample <- i
@@ -338,8 +421,6 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
   # a single data.frame for the user-defined predict() function.
   data_predict <- dplyr::bind_rows(data_sample)
 
-  #data_predict <- dplyr::filter(data_predict, index == 1  & causal == 1)
-
   # shapFlex internal function to compute the final symmetric and/or asymmetric Shapley values.
   data_shap <- predict_shapFlex(
     reference = reference,  # input arg.
@@ -348,7 +429,7 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     predict_function = predict_function,  # input arg.
     n_features = n_features,  # Calculated.
     causal = causal,  # input arg.
-    causal_weights = causal_weights,  # input arg.
+    causal_weights = combined_weights,  # Calculated
     causal_target = causal_target_all # Calculated.
   )
   #----------------------------------------------------------------------------

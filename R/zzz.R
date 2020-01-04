@@ -11,6 +11,7 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
   data_predicted <- predict_function(model, data_model)
 
   data_predicted <- dplyr::bind_cols(data_meta, data_predicted)
+  # data_predicted <- dplyr::bind_cols(data_model, data_meta, data_predicted)
 
   # Returns a length 1 numeric vector of the average prediction--i.e., intercept--from the reference group.
   intercept <- mean(predict_function(model, reference)[, 1], na.rm = TRUE)
@@ -32,53 +33,51 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
 
     # Eqn. 16 from https://arxiv.org/pdf/1910.06358.pdf.
 
-    # shap_u_1_12
-    shap_u_1_12 <- data_causal$feature_random_real_effects - data_causal$feature_random_fake_effects
+    data_causal_target <- dplyr::filter(data_causal, causal_type == "causal_target")
+    data_causal_effect <- dplyr::filter(data_causal, causal_type == "causal_effect")
 
-    # shap_u_1_21
-    shap_u_1_21 <- data_causal$feature_static_real_effects - data_causal$feature_static_fake_effects
+    # User-specified causal outcomes from 'causal = ...'.
+    data_causal_target$shap_u_2_12 <- data_causal_target$feature_static_real_effects - data_causal_target$feature_random_real_effects
+    data_causal_target$shap_u_2_21 <- data_causal_target$feature_static_fake_effects - data_causal_target$feature_random_fake_effects
 
-    # shap_u_2_12
-    shap_u_2_12 <- data_causal$feature_static_real_effects - data_causal$feature_random_real_effects
-
-    # shap_u_2_21
-    shap_u_2_21 <- data_causal$feature_static_fake_effects - data_causal$feature_random_fake_effects
-
-    # weight_12 = 1 represents conditioning on the real effect when estimating the Shapley value
-    # for the causal target i.e., shap_u_2_12. weight_12 = .5 is, in the limit, equivalentto the
-    # symmetric Shapley value. However, eve with a weight of .5, the symmetric and asymmetric Shapley
-    # values for the same target feature will likely differ because, in the symmetric case, the causal
-    # effects used in the asymmetric equivalent will appear to the left (real) and right (fake) of
-    # the target feature pivot in the Frankenstein instance stochastically which only approaches
-    # 50/50 or .5 in the limit of Monte Carlo samples.
-    weight_12 <- causal_weights
-    weight_21 <- 1 - causal_weights
-
-    data_shap_asym <- data.frame(shap_u_1_12, shap_u_1_21, shap_u_2_12, shap_u_2_21)
+    # Causal effects that have been transformed to causal outcomes for analysis.
+    data_causal_effect$shap_u_1_12 <- data_causal_effect$feature_static_fake_effects - data_causal_effect$feature_random_fake_effects
+    data_causal_effect$shap_u_1_21 <- data_causal_effect$feature_static_real_effects - data_causal_effect$feature_random_real_effects
 
     # Joining a dictionary of causal weights for the asymmetric Shapley value calculations to
     # the combination of the four Frankenstein instances into two because the data have been sorted
     # along the way and this approach is more robust for computing weighted averages of the Shapley values.
-    data_shap_asym$feature_name <- data_causal$feature_name
 
-    data_shap_asym <- dplyr::left_join(data_shap_asym,
-                                       data.frame("feature_name" = causal_target, weight_12, weight_21, stringsAsFactors = FALSE),
-                                       by = "feature_name")
+    # weight_12 = 1 represents conditioning on the real effect when estimating the Shapley value
+    # for the causal target i.e., shap_u_2_12. weight_12 = .5 is, in the limit, equivalent to the
+    # symmetric Shapley value. However, even with a weight of .5, the symmetric and asymmetric Shapley
+    # values for the same target feature will likely differ because, in the symmetric case, the causal
+    # effects used in the asymmetric equivalent will appear to the left (real) and right (fake) of
+    # the target feature pivot in the Frankenstein instance stochastically which only approaches
+    # 50/50 or .5 in an infinite number of Monte Carlo samples.
+    data_causal_target <- dplyr::left_join(data_causal_target, causal_weights, by = "feature_name")
+    data_causal_effect <- dplyr::left_join(data_causal_effect, causal_weights, by = "feature_name")
 
+    #--------------------------------------------------------------------------
     # Eqn. 17 from https://arxiv.org/pdf/1910.06358.pdf.
 
     # Computing the weighted averages by row because of changing weights within a column.
-    shap_u_1 <- unlist(lapply(1:nrow(data_shap_asym), function(i) {
-      stats::weighted.mean(data_shap_asym[i, c("shap_u_1_12", "shap_u_1_21")], c(data_shap_asym$weight_12[i], data_shap_asym$weight_21[i]), na.rm = TRUE)
+
+    # Causal outcomes.
+    shap_u_2 <- unlist(lapply(1:nrow(data_causal_target), function(i) {
+      stats::weighted.mean(data_causal_target[i, c("shap_u_2_12", "shap_u_2_21")], c(data_causal_target$weight_12[i], data_causal_target$weight_21[i]), na.rm = TRUE)
     }))
 
-    shap_u_2 <- unlist(lapply(1:nrow(data_shap_asym), function(i) {
-      stats::weighted.mean(data_shap_asym[i, c("shap_u_2_12", "shap_u_2_21")], c(data_shap_asym$weight_12[i], data_shap_asym$weight_21[i]), na.rm = TRUE)
+    # Causal effects where Shapley values have been requested.
+    shap_u_1 <- unlist(lapply(1:nrow(data_causal_effect), function(i) {
+      stats::weighted.mean(data_causal_effect[i, c("shap_u_1_12", "shap_u_1_21")], c(data_causal_effect$weight_12[i], data_causal_effect$weight_21[i]), na.rm = TRUE)
     }))
-
-    #data_shap_asym$shap_effect <- shap_u_2
+    #--------------------------------------------------------------------------
     # Shapley value for each Monte Carlo sample for each instance.
-    data_causal$shap_effect <- shap_u_2
+    data_causal_target$shap_effect <- shap_u_2
+    data_causal_effect$shap_effect <- shap_u_1
+
+    data_causal <- dplyr::bind_rows(data_causal_target, data_causal_effect)
   }  # End asymmetric causal Shapley value calculations per Monte Carlo sample.
   #--------------------------------------------------------------------------
 
