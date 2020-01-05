@@ -27,8 +27,6 @@ feature after having conditioned on other pre-specified "causal" feature effects
     + The code itself hasn't necessarily been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
  to <u>select 1 or more target features of interest</u> and avoid having to compute Shapley values for all model features. This is especially 
  useful in high-dimensional models as the computation of a Shapley value is exponential in the number of features.
- 
-***
    
 ## Install
    
@@ -44,7 +42,7 @@ specified in `shapFlex` is forthcoming.
 
 ## Examples
 
-* Below is an example of how `shapFlex` can be used to compute Shapley values for a subset of model 
+Below is an example of how `shapFlex` can be used to compute Shapley values for a subset of model 
 features from a Random Forest model based on 3 sets of assumptions about causality amongst the model features:
 
 **1. Symmetric:** Default. No causal knowledge is incorporated into the Shapley calculations.
