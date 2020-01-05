@@ -34,6 +34,8 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
     # Eqn. 16 from https://arxiv.org/pdf/1910.06358.pdf.
 
     data_causal_target <- dplyr::filter(data_causal, causal_type == "causal_target")
+    # The effect data.frame will be empty when (a) no causal targets appear as causal effects or (b) there
+    # are no causal effects in 'target_features'.
     data_causal_effect <- dplyr::filter(data_causal, causal_type == "causal_effect")
 
     # User-specified causal outcomes from 'causal = ...'.
@@ -55,9 +57,8 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
     # effects used in the asymmetric equivalent will appear to the left (real) and right (fake) of
     # the target feature pivot in the Frankenstein instance stochastically which only approaches
     # 50/50 or .5 in an infinite number of Monte Carlo samples.
-    data_causal_target <- dplyr::left_join(data_causal_target, causal_weights, by = "feature_name")
-    data_causal_effect <- dplyr::left_join(data_causal_effect, causal_weights, by = "feature_name")
-
+    data_causal_target <- dplyr::left_join(data_causal_target, causal_weights, by = c("feature_name", "causal_type"))
+    data_causal_effect <- dplyr::left_join(data_causal_effect, causal_weights, by = c("feature_name", "causal_type"))
     #--------------------------------------------------------------------------
     # Eqn. 17 from https://arxiv.org/pdf/1910.06358.pdf.
 
@@ -69,21 +70,32 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
     }))
 
     # Causal effects where Shapley values have been requested.
-    shap_u_1 <- unlist(lapply(1:nrow(data_causal_effect), function(i) {
-      stats::weighted.mean(data_causal_effect[i, c("shap_u_1_12", "shap_u_1_21")], c(data_causal_effect$weight_12[i], data_causal_effect$weight_21[i]), na.rm = TRUE)
-    }))
+    if (nrow(data_causal_effect) > 0) {
+
+      shap_u_1 <- unlist(lapply(1:nrow(data_causal_effect), function(i) {
+        stats::weighted.mean(data_causal_effect[i, c("shap_u_1_12", "shap_u_1_21")], c(data_causal_effect$weight_12[i], data_causal_effect$weight_21[i]), na.rm = TRUE)
+      }))
+    }
     #--------------------------------------------------------------------------
     # Shapley value for each Monte Carlo sample for each instance.
     data_causal_target$shap_effect <- shap_u_2
-    data_causal_effect$shap_effect <- shap_u_1
+
+    if (nrow(data_causal_effect) > 0) {
+      data_causal_effect$shap_effect <- shap_u_1
+    }
 
     data_causal <- dplyr::bind_rows(data_causal_target, data_causal_effect)
+
+    data_causal <- data_causal %>%
+      dplyr::group_by(.data$index, .data$sample, .data$feature_name) %>%
+      dplyr::summarize("shap_effect" = mean(shap_effect, na.rm = TRUE))
+
   }  # End asymmetric causal Shapley value calculations per Monte Carlo sample.
   #--------------------------------------------------------------------------
 
   data_predicted <- dplyr::bind_rows(data_non_causal, data_causal)
 
-  data_predicted <- dplyr::select(data_predicted, .data$index, .data$sample, .data$feature_name, .data$causal, .data$shap_effect)
+  data_predicted <- dplyr::select(data_predicted, .data$index, .data$sample, .data$feature_name, .data$shap_effect)
 
   # Final Shapley value calculation collapsed across Monte Carlo samples.
   data_predicted <- data_predicted %>%
