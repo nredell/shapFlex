@@ -102,12 +102,11 @@ sample_size <- 60  # Number of Monte Carlo samples.
 
 target_features <- c("marital_status", "education", "relationship",
                      "age", "sex", "race", "hours_per_week")  # Optional: A subset of features.
-names(explain)
+                     
 causal = list(marital_status ~ age + sex + race + native_country,  # Causal specifications.
               education ~ age + sex + race + native_country,
               relationship ~ age + sex + race + native_country)
 
-causal_weights = rep(1, length(causal))
 #------------------------------------------------------------------------------
 # 1: Non-causal symmetric Shapley values: ~10 seconds to run.
 set.seed(1)
