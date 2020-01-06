@@ -67,10 +67,8 @@ library(randomForest)
 # Input data: Adult aka Census Income dataset.
 data("data_adult", package = "shapFlex")
 data <- data_adult
-
 #------------------------------------------------------------------------------
 # Train a machine learning model; currently limited to single outcome regression and binary classification.
-
 outcome_name <- "income"
 outcome_col <- which(names(data) == outcome_name)
 
@@ -171,8 +169,6 @@ p <- p + xlab(NULL) + ylab("Average Shapley effect (baseline is .23)") + labs(fi
 p
 ```
 ![](./tools/shap_avg_feature_effects.png)
-
-***
 
 ## Cite
 
