@@ -1,6 +1,6 @@
 [![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
 [![Travis Build Status](https://travis-ci.org/nredell/shapFlex.svg?branch=master)](https://travis-ci.org/nredell/shapFlex)
-[![Codecov test coverage](https://codecov.io/gh/nredell/shapFlex/branch/master/graph/badge.svg)](https://codecov.io/gh/nredell/shapFlex?branch=master)
+[![Codecov test coverage](https://codecov.io/gh/nredell/shapFlex/branch/master/graph/badge.svg)](https://codecov.io/gh/nredell/shapFlex)
                                                                                
 # package::shapFlex <img src="./tools/shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
