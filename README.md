@@ -179,3 +179,13 @@ Redell, N. (2019). [Shapley decomposition of R^2 in machine learning models](htt
 ## References
 
 Štrumbelj, E. & Kononenko, I. (2014) Explaining prediction models and individual predictions with feature contributions. Knowl Inf Syst (2014) 41: 647. https://doi.org/10.1007/s10115-013-0679-x
+
+## Roadmap
+
+* Thorough unit testing with many different causal setups and simulated, ground truth data.
+
+* Vignettes detailing how the algorithms work--in pictures.
+
+* Think about how `lavaan` and `piecewiseSEM` models might be incorporated.
+
+* This package, done right, might be a good fit for the R Journal.
