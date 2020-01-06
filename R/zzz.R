@@ -11,7 +11,6 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
   data_predicted <- predict_function(model, data_model)
 
   data_predicted <- dplyr::bind_cols(data_meta, data_predicted)
-  # data_predicted <- dplyr::bind_cols(data_model, data_meta, data_predicted)
 
   # Returns a length 1 numeric vector of the average prediction--i.e., intercept--from the reference group.
   intercept <- mean(predict_function(model, reference)[, 1], na.rm = TRUE)
@@ -33,10 +32,10 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
 
     # Eqn. 16 from https://arxiv.org/pdf/1910.06358.pdf.
 
-    data_causal_target <- dplyr::filter(data_causal, causal_type == "causal_target")
+    data_causal_target <- dplyr::filter(data_causal, .data$causal_type == "causal_target")
     # The effect data.frame will be empty when (a) no causal targets appear as causal effects or (b) there
     # are no causal effects in 'target_features'.
-    data_causal_effect <- dplyr::filter(data_causal, causal_type == "causal_effect")
+    data_causal_effect <- dplyr::filter(data_causal, .data$causal_type == "causal_effect")
 
     # User-specified causal outcomes from 'causal = ...'.
     data_causal_target$shap_u_2_12 <- data_causal_target$feature_static_real_effects - data_causal_target$feature_random_real_effects
@@ -88,7 +87,7 @@ predict_shapFlex <- function(reference, data_predict, model, predict_function,
 
     data_causal <- data_causal %>%
       dplyr::group_by(.data$index, .data$sample, .data$feature_name) %>%
-      dplyr::summarize("shap_effect" = mean(shap_effect, na.rm = TRUE))
+      dplyr::summarize("shap_effect" = mean(.data$shap_effect, na.rm = TRUE))
 
   }  # End asymmetric causal Shapley value calculations per Monte Carlo sample.
   #--------------------------------------------------------------------------

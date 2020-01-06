@@ -5,3 +5,4 @@
 ^vignettes$
 ^\.Rhistory$
 ^\.travis\.yml$
+^codecov\.yml$

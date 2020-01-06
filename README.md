@@ -1,5 +1,6 @@
 [![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
 [![Travis Build Status](https://travis-ci.org/nredell/shapFlex.svg?branch=master)](https://travis-ci.org/nredell/shapFlex)
+[![Codecov test coverage](https://codecov.io/gh/nredell/shapFlex/branch/master/graph/badge.svg)](https://codecov.io/gh/nredell/shapFlex?branch=master)
                                                                                
 # package::shapFlex <img src="./tools/shapFlex_logo.png" alt="shapFlex logo" align="right" height="138.5" style="display: inline-block;">
 
@@ -64,14 +65,9 @@ library(ggplot2)
 library(randomForest)
 
 # Input data: Adult aka Census Income dataset.
-data <- read.table('https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',
-                   sep = ',', fill = FALSE, strip.white = TRUE)
+data("data_adult", package = "shapFlex")
+data <- data_adult
 
-colnames(data) <- c('age', 'workclass', 'fnlwgt', 'education',
-                     'education_num', 'marital_status', 'occupation', 'relationship', 'race', 'sex',
-                     'capital_gain', 'capital_loss', 'hours_per_week', 'native_country', 'income')
-
-data$fnlwgt <- NULL  # Remove a sample weighting column to match https://arxiv.org/pdf/1910.06358.pdf.
 #------------------------------------------------------------------------------
 # Train a machine learning model; currently limited to single outcome regression and binary classification.
 

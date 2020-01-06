@@ -193,9 +193,9 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     # This dataset is passed into predict_shapFlex in zzz.R and used to compute the asymmetric
     # Shapley values in eqn 16.
     combined_weights <- combined_weights %>%
-      dplyr::group_by(feature_name, causal_type) %>%
-      dplyr::summarize("weight_12" = mean(weight_12, na.rm = TRUE),
-                       "weight_21" = mean(weight_21, na.rm = TRUE))
+      dplyr::group_by(.data$feature_name, .data$causal_type) %>%
+      dplyr::summarize("weight_12" = mean(.data$weight_12, na.rm = TRUE),
+                       "weight_21" = mean(.data$weight_21, na.rm = TRUE))
 
   } else {  # Set to avoid errors in several if() statements. To-do: clean this up.
 
