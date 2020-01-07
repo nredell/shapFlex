@@ -11,6 +11,10 @@ can be used to (a) interpret and/or (b) assess the fairness of any machine learn
 are an intuitive and theoretically sound model-agnostic diagnostic tool to understand both **global feature importance** across all instances in a data set 
 and instance/row-level **local feature importance** in black-box machine learning models.
 
+**NOTE TO USERS: THE SYMMETRIC SHAPLEY VALUE ALGORITHM HAS BEEN TESTED FOR ACCURACY WITH SIMUALTED AND APPLIED DATA (UNIT TESTS COMING); 
+HOWEVER, THE ASYMMETRIC, CAUSAL SHAPLEY VALUE ALGORITHM IS STILL BEING EVALUATED FOR ACCURACY. I'LL REMOVE THIS NOTE WHEN I'M 
+CONFIDENT THAT ITS WORKING...IT'S JUST EASIER TO WORK OUT OF THE MASTER BRANCH :)**
+
 This package implements the algorithm described in 
 [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) 
 to compute the stochastic Shapley values for a given model feature and the algorithm described in 
