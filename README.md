@@ -39,9 +39,9 @@ feature after having conditioned on other pre-specified "causal" feature effects
     + **[Symmetric Shapley values](#symmetric-shapley-values)**
     + **[Asymmetric causal Shapley values (EXPERIMENTAL)](#asymmetric-causal-shapley-values)**
     + **[R2 decomposition](#r2-decomposition)**
-* **Cite(#cite)**
-* **References(#references)**
-* **Roadmap(#roadmap)**
+* **[Cite](#cite)**
+* **[References](#references)**
+* **[Roadmap](#roadmap)**
 
 
 ## Install
@@ -208,6 +208,7 @@ of feature importance for any black box model. The `shapFlex::r2()` will also wo
 values computed from other packages.
 
 ``` r
+library(shapFlex)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
