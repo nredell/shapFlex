@@ -4,9 +4,17 @@
 \alias{shapFlex}
 \title{Compute symmetric or asymmetric stochastic feature-level Shapley values}
 \usage{
-shapFlex(explain, reference = NULL, model, predict_function,
-  target_features = NULL, causal = NULL, causal_weights = NULL,
-  sample_size = 60, use_future = FALSE)
+shapFlex(
+  explain,
+  reference = NULL,
+  model,
+  predict_function,
+  target_features = NULL,
+  causal = NULL,
+  causal_weights = NULL,
+  sample_size = 60,
+  use_future = FALSE
+)
 }
 \arguments{
 \item{explain}{A data.frame of instances to be explained using Shapley values. \code{explain} is passed internally

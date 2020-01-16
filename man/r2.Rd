@@ -4,21 +4,26 @@
 \alias{r2}
 \title{Compute feature importances using a Shapley variance decomposition of R^{2}}
 \usage{
-r2(shap, y, scale = c("r2", "1"))
+r2(shap, y, intercept, scale = c("r2", "1"))
 }
 \arguments{
 \item{shap}{A matrix or data.frame of Shapley values. The dimensions should be 'number of instances' by
 'number of features'. The predicted outcome for each instance, used in the R^{2} caluclation, is the row
-sum of Shapley values across columns.}
+sum of Shapley values across columns + the user-supplied \code{intercept}.}
 
-\item{y}{A vector or 1-column matrix or data.frame with the outcome being predicted.}
+\item{y}{A \code{length(nrow(shap)} numeric vector or 1-column matrix or data.frame with the outcome being predicted.}
+
+\item{intercept}{A length-1 numeric vector giving the model's average prediction. The \code{intercept}
+is returned in \code{shapFlex()}.}
 
 \item{scale}{The scaling of the feature importances. \code{r2} (default) scales feature-level importances to the
 overall model R^{2} while \code{1} scales feature importances along a 0 to 1 scale.}
 }
 \value{
-A data.frame of the feature importances with the model's global R^{2} ('r2') and the feature-level
-importances or attribution of variance explained ('r2_shap').
+A data.frame of the feature importances with the model's global R^{2} ('r2'), the feature-level
+importances or attribution of variance explained ('r2_shap'), and the proportion of variance between the
+baseline or intercept-only model and the final model that can be uniquely ascribed to a given feature
+('sigma_unique').
 }
 \description{
 This function uses pre-computed Shapley values to decompose the overall model R^{2} into feature-level

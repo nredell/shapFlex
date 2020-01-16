@@ -20,7 +20,7 @@ Imports:
     magrittr (>= 1.5),
     testthat (>= 2.3.0),
     randomForest
-RoxygenNote: 6.1.1
+RoxygenNote: 7.0.2
 Collate: 
     'shapFlex.R'
     'r2.R'

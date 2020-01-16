@@ -11,10 +11,6 @@ can be used to (a) interpret and/or (b) assess the fairness of any machine learn
 are an intuitive and theoretically sound model-agnostic diagnostic tool to understand both **global feature importance** across all instances in a data set 
 and instance/row-level **local feature importance** in black-box machine learning models.
 
-**NOTE TO USERS: THE SYMMETRIC SHAPLEY VALUE ALGORITHM HAS BEEN TESTED FOR ACCURACY WITH SIMUALTED AND APPLIED DATA (UNIT TESTS COMING); 
-HOWEVER, THE ASYMMETRIC, CAUSAL SHAPLEY VALUE ALGORITHM IS STILL BEING EVALUATED FOR ACCURACY. I'LL REMOVE THIS NOTE WHEN I'M 
-CONFIDENT THAT ITS WORKING...IT'S JUST EASIER TO WORK OUT OF THE MASTER BRANCH :)**
-
 This package implements the algorithm described in 
 [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) 
 to compute the stochastic Shapley values for a given model feature and the algorithm described in 
@@ -33,20 +29,45 @@ feature after having conditioned on other pre-specified "causal" feature effects
     + The code itself hasn't necessarily been optimized for speed. The speed advantage of `shapFlex` comes in the form of giving the user the ability 
  to <u>select 1 or more target features of interest</u> and avoid having to compute Shapley values for all model features. This is especially 
  useful in high-dimensional models as the computation of a Shapley value is exponential in the number of features.
-   
+
+
+## README Contents
+
+* **[Install](#install)**
+* **[Vignettes](#vignettes)**
+* **Examples**
+    + **[Symmetric Shapley values](#symmetric-shapley-values)**
+    + **[Asymmetric causal Shapley values (EXPERIMENTAL)](#asymmetric-causal-shapley-values)**
+    + **[R2 decomposition](#r2-decomposition)**
+* **Cite(#cite)**
+* **References(#references)**
+* **Roadmap(#roadmap)**
+
+
 ## Install
-   
+
+* Development
+
 ``` r
 devtools::install_github("nredell/shapFlex")
 library(shapFlex)
 ```
 
-## Overview
+## Vignettes
 
 * A vignette detailing how the algorithms work as well as how various types of causal assumptions can be 
 specified in `shapFlex` is forthcoming.
 
+
 ## Examples
+
+### Symmetric Shapley values
+
+* TBD
+
+### Asymmetric causal Shapley values
+
+**EXPERIMENTAL**
 
 Below is an example of how `shapFlex` can be used to compute Shapley values for a subset of model 
 features from a Random Forest model based on 3 sets of assumptions about causality amongst the model features:
@@ -137,8 +158,11 @@ explained_half <- shapFlex::shapFlex(explain = explain,
                                      causal = causal,
                                      causal_weights = rep(.5, length(causal)),  # Approximates symmetric calc.
                                      sample_size = sample_size)
-#------------------------------------------------------------------------------
-# Data summaries for plotting average Shapley feature effects across instances.
+```
+
+* Reshape the data for plotting.
+
+``` r
 explained_non_causal_sum <- explained_non_causal %>%
   dplyr::group_by(feature_name) %>%
   dplyr::summarize("shap_effect" = mean(shap_effect, na.rm = TRUE))
@@ -175,15 +199,102 @@ p
 ```
 ![](./tools/shap_avg_feature_effects.png)
 
+***
+
+### R2 decomposition
+
+The code below illustrates how to decompose a regression model's R^2 to get global measures 
+of feature importance for any black box model. The `shapFlex::r2()` will also work with Shapley 
+values computed from other packages.
+
+``` r
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(randomForest)
+
+data("imports85", package = "randomForest")
+data <- imports85
+
+data <- data[, -2]  # This column has excessive missing data.
+data <- data[complete.cases(data), ]
+#------------------------------------------------------------------------------
+# Train a machine learning model; currently limited to single outcome regression and binary classification.
+
+outcome_col <- which(names(data) == "price")
+outcome_name <- names(data)[outcome_col]
+
+model_formula <- formula(paste0(outcome_name,  "~ ."))
+
+model <- randomForest::randomForest(model_formula, data = data, ntree = 300)
+#------------------------------------------------------------------------------
+# A user-defined prediction function that takes 2 positional arguments and returns
+# a 1-column data.frame of predictions for each instance to be explained: (1) A trained
+# ML model object and (2) a data.frame of model features; transformations of the input
+# data such as converting the data.frame to a matrix should occur within this wrapper.
+predict_function <- function(model, data) {
+
+  data_pred <- data.frame("y_pred" = predict(model, data))
+  return(data_pred)
+}
+#------------------------------------------------------------------------------
+# shapFlex setup.
+
+# Compute Shapley feature-level predictions for all 193 instaces in the dataset.
+explain <- data[, -outcome_col]
+
+reference <- NULL  # The optional reference group is not needed because we're using the population.
+
+sample_size <- 60  # Number of Monte Carlo samples.
+
+target_features <- NULL  # Default; compute Shapley values for all features.
+#------------------------------------------------------------------------------
+# Symmetric Shapley values with no causal specifications; ~10 seconds to run.
+set.seed(224)
+data_shap <- shapFlex::shapFlex(explain = explain,
+                                reference = reference,
+                                model = model,
+                                predict_function = predict_function,
+                                target_features = target_features,
+                                sample_size = sample_size)
+
+head(data_shap, 10)
+```
+![](./tools/shapFlex_output.PNG)
+
+* Reshape the data for `r2()`.
+
+``` r
+data_shap_wide <- tidyr::pivot_wider(data_shap, id_cols = "index",
+                                     names_from = "feature_name", values_from = "shap_effect")
+
+data_shap_wide$index <- NULL
+
+head(data_shap_wide)
+```
+![](./tools/shapFlex_output_wide.PNG)
+
+``` r
+y <- data[, outcome_name]
+intercept <- unique(data_shap$intercept)
+
+shapFlex::r2(data_shap_wide, y, intercept)
+```
+
+![](./tools/r2.PNG)
+
+
 ## Cite
 
 At the moment, the best citation for this package is related to the `shapFlex::r2()` function.
 
 Redell, N. (2019). [Shapley decomposition of R^2 in machine learning models](https://arxiv.org/abs/1908.09718). arXiv preprint arXiv:1908.09718.
 
+
 ## References
 
 Štrumbelj, E. & Kononenko, I. (2014) Explaining prediction models and individual predictions with feature contributions. Knowl Inf Syst (2014) 41: 647. https://doi.org/10.1007/s10115-013-0679-x
+
 
 ## Roadmap
 
