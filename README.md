@@ -284,6 +284,7 @@ shapFlex::r2(data_shap_wide, y, intercept)
 
 ![](./tools/r2.PNG)
 
+***
 
 ## Cite
 
