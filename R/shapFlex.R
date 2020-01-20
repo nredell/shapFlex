@@ -17,16 +17,11 @@
 #' @param target_features Optional. A character vector that is a subset of feature names in \code{explain} for which Shapley values will be computed.
 #' For high-dimensional models, selecting a subset of interesting features may dramatically speed up computation time. The default behavior is
 #' to return Shapley values for all instances and features in \code{explain}.
-#' @param causal Optional. A list of 1 or more formulas that specify a causal direction for computing asymmetric Shapley values. For example,
-#' \code{list(x1 ~ x2 + x3)} or \code{list(formula(x1 ~ x2 + x3))} computes Shapley values for \code{x_1} after conditioning on
-#' the true/actual values of \code{x2} and \code{x3} for the instance being explained. Only 1 feature is allowed on the left hand side
-#' of the formula, and only 1 formula is allowed per left hand side feature i.e., no duplicated causal constraints for a target feature.
-#' @param causal_weights Optional. A numeric vector of \code{length(causal)} with weights between 0 and 1 that specifies the strength of
+#' @param causal Optional. A 2-column data.frame of feature names: The 1st column gives causes, the 2nd column gives effects.
+#' @param causal_weights Optional. A numeric vector of \code{nrow(causal)} with weights between 0 and 1 that specifies the strength of
 #' the causal asymmetric Shapley values. A weight of 1--the default if \code{causal_weights = NULL}--estimates a pure causal effect where the
-#' instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling (e.g., Shapley values for \code{x1}
-#' are based on the instance's true \code{x2} and \code{x3}). A weight of .5 is equivalent to the symmetric Shapley value
-#' calculation--within sampling error--and represents the case where the researcher is uncertain as to whether or not \code{x2} and
-#' \code{x_3} causally precede or follow \code{x1}.
+#' instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling. A weight of .5 is equivalent to
+#' the symmetric Shapley value calculation--within sampling error.
 #' @param sample_size A numeric vector of length 1 giving the number of Monte Carlo samples used to compute the stochastic Shapley values for
 #' each feature.
 #' @param use_future Boolean. If \code{TRUE}, the \code{future} package is used to calculate Shapley values in parallel across \code{sample_size}.
@@ -57,15 +52,15 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     stop("All target features should be in names(explain).")
   }
 
-  if (!is.null(causal) && !methods::is(causal, "list")) {
-    stop("Enter the 'causal' specifications as a list of formulas.")
+  if (!is.null(causal) && !methods::is(causal, "data.frame")) {
+    stop("Enter the 'causal' specifications as a 2-column data.frame of feature names of the causes (1) and effects (2).")
   }
 
   if (!is.null(causal) && is.null(causal_weights)) {
-    causal_weights <- rep(1, length(causal))  # Default is to estimate a pure "causal" effect.
+    causal_weights <- rep(1, nrow(causal))  # Default is to estimate a pure "causal" effect.
   }
 
-  if (!is.null(causal) && length(causal) != length(causal_weights)) {
+  if (!is.null(causal) && nrow(causal) != length(causal_weights)) {
     stop("Enter a length(causal) numeric vector of weights between 0 and 1; '1' estimates a pure 'causal' effect.")
   }
 
@@ -84,8 +79,6 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
   }
   #----------------------------------------------------------------------------
   n_features <- ncol(explain)
-
-  n_target_features <- length(target_features)
   #----------------------------------------------------------------------------
   if (is.null(reference)) {  # Default is to explain all instances in 'explain' without a specific reference group.
 
@@ -99,115 +92,37 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
   #----------------------------------------------------------------------------
   if (!is.null(causal)) {
 
-    causal_formula <- lapply(causal, function(x){as.character(attributes(stats::terms(x))$variables)[-1]})
+    causal_graph <- igraph::graph_from_data_frame(causal, directed = TRUE)
 
-    causal_target_all <- lapply(causal_formula, function(x){x[1]})
-    causal_effects_all <- lapply(causal_formula, function(x){x[-1]})
+    nodes <- attributes(igraph::V(causal_graph))$names
 
-    # shapFlex currently only supports unduplicated endogenous targets.
-    if (any(duplicated(unlist(causal_target_all)))) {
-      stop("Remove formulas from 'causal' with duplicate endogenous/outcome features e.g., list(x1 ~ x2, x1 ~ x3) should be list(x1 ~ x2 + x3).")
-    }
+    # Nodes where arrows are leaving.
+    each_node_causes <- purrr::map(nodes, ~ names(igraph::subcomponent(causal_graph, ., mode = "out")))
+    names(each_node_causes) <- nodes
+
+    # Nodes where arrows are entering.
+    each_node_is_an_effect_from <- purrr::map(nodes, ~ names(igraph::subcomponent(causal_graph, ., mode = "in")))
+    names(each_node_is_an_effect_from) <- nodes
+
+    # Determine if each node is a cause and or an effect for computing the asymmetric Shapley values.
+    causal_nodes <- nodes[nodes %in% unlist(lapply(each_node_is_an_effect_from, function(x) {x[-1]}))]
+    effect_nodes <- nodes[nodes %in% unlist(lapply(each_node_causes, function(x) {x[-1]}))]
 
     # Shapley values are computed for all causal outcomes but only for causal effects specified in 'target_features'.
-    if (any(!unlist(causal_target_all) %in% target_features)) {
-      stop("One or more of the endogenous/outcome features from 'causal' is not in 'target_features'.")
+    if (any(!nodes %in% target_features)) {
+      stop("One or more of the features from 'causal' is not in 'target_features'.")
     }
 
-    if (any(!unlist(causal_effects_all) %in% names(explain))) {
-      stop("One or more of the exogenous/effects features from 'causal' is not in the input data.")
+    if (any(!nodes %in% names(explain))) {
+      stop("One or more of the features from 'causal' is not in the input data.")
     }
-    #--------------------------------------------------------------------------
-    causal_effects_unique <- unique(unlist(causal_effects_all))
-    causal_effects_unique <- causal_effects_unique[causal_effects_unique %in% target_features]  # Estimate select effects.
-    causal_effects_unique <- sapply(causal_effects_unique, as.list)
 
-    # For each causal effect, find all of the causal targets that it is an effect of. The collection
-    # of these causal targets will become causal effects.
-    map_of_causal_targets_per_effect <- lapply(seq_along(unlist(causal_effects_unique)), function(i) {
-      effect_in_formulas <- lapply(seq_along(causal_effects_all), function(j) {
-        unlist(causal_effects_unique)[i] %in% causal_effects_all[[j]]
-      })
-      effect_in_formulas <- which(unlist(effect_in_formulas))
-    })
+  } else {  # Symmetric Shapley values
 
-    # This is the list of causal targets that each effect was paired with in the 'causal' input arg.
-    new_causal_effects <- lapply(seq_along(map_of_causal_targets_per_effect), function(i) {
-      unlist(causal_target_all[map_of_causal_targets_per_effect[[i]]])
-    })
-
-    # The causal effects need to be transformed into targets to get weighted properly when they are
-    # on the right hand side of a causal formula. This focus is due to the fact that Shapley values
-    # sum to the overall model prediction and if one Shapley value goes up another must go down.
-    causal_target_all <- append(causal_target_all, causal_effects_unique)
-    causal_target_all <- unlist(causal_target_all)
-
-    # Add a list of causal effects to the newly created formulas where the causes have been transformed
-    # to be endogenous.
-    causal_effects_all <- append(causal_effects_all, new_causal_effects)
-
-    # Re-order to identify features that are both causal targets and causal effects, placing causal targets
-    # at the start of the 'j' loop.
-    target_feature_order <- c(causal_target_all, target_features[!target_features %in% causal_target_all])
-
-    # The length of the 'j' loop over features where Shapley values are calculated needs to be expanded
-    # to account for the estimates of any causal effects that (a) aren't already endogenous and (b) are listed
-    # as a target feature in the function call.
-    n_target_features <- length(target_feature_order)
-    #--------------------------------------------------------------------------
-    # Users are only asked to enter 1 causal weight per formula. However,
-    # weights need to be calculated for any causal effects (right-had side of a formula) in 'target_features'
-    # to satisfy the sum constraint on the Shapley values equaling the model preictions (i.e., more than just
-    # the target/outcome needs to be adjusted with asymmetric Shapley values). Causal targets, then, are also effects
-    # for their own effects. The math will be spelled out in a vignette, but, roughly, the following setup of
-    # list(x1 ~ x2, x2 ~ x1) with causal_weights = c(1, 1) in the function will be trainsformed into causal weights
-    # of .5 and .5 in the code below.
-
-    # Initialize a list of data.frames of the cause and effect weights as seen in eqn 16.
-    target_weights <- lapply(causal_target_all, data.frame)
-    effect_weights <- lapply(causal_effects_all, data.frame)
-
-    target_weights <- lapply(seq_along(target_weights), function(i) {
-      names(target_weights[[i]]) <- "feature_name"
-      target_weights[[i]]$feature_name <- as.character(target_weights[[i]]$feature_name)
-      target_weights[[i]]$weight_12 <- causal_weights[i]  # 1 is the pure causal impact for a causal target/outcome after conditioning on all causal effects.
-      target_weights[[i]]$weight_21 <- 1 - causal_weights[i]
-      target_weights[[i]]$causal_type <- "causal_target"
-      target_weights[[i]]
-    })
-
-    effect_weights <- lapply(seq_along(causal_effects_all), function(i) {
-      names(effect_weights[[i]]) <- "feature_name"
-      effect_weights[[i]]$feature_name <- as.character(effect_weights[[i]]$feature_name)
-      effect_weights[[i]]$weight_12 <- causal_weights[i]  # 1 is the pure impact of the causal effect relative to the average baseline output.
-      effect_weights[[i]]$weight_21 <- 1 - causal_weights[i]
-      effect_weights[[i]]$causal_type <- "causal_effect"
-      effect_weights[[i]]
-      })
-
-    combined_weights <- dplyr::bind_rows(target_weights, effect_weights)
-
-    # The weights are averaged out to account for all the times when a feautre was a causal target and/or
-    # a causal effect as specified in the 'causal' argument.
-
-    # This dataset is passed into predict_shapFlex in zzz.R and used to compute the asymmetric
-    # Shapley values in eqn 16.
-    combined_weights <- combined_weights %>%
-      dplyr::group_by(.data$feature_name, .data$causal_type) %>%
-      dplyr::summarize("weight_12" = mean(.data$weight_12, na.rm = TRUE),
-                       "weight_21" = mean(.data$weight_21, na.rm = TRUE))
-
-  } else {  # Set to avoid errors in several if() statements. To-do: clean this up.
-
-    causal_target_all <- "causal_target_not_in_target_features[j]"
-    causal_effects_all <- "causal_target_not_in_target_features[j]"
-    causal_target <- "causal_target_not_in_target_features[j]"
-    causal_effects <- "causal_target_not_in_target_features[j]"
-    causal_effects_targets <- "causal_target_not_in_target_features[j]"
-
-    target_feature_order <- target_features
+    nodes <- NULL  # Set for if () conditions.
   }
   #----------------------------------------------------------------------------
+  # i <- j <- 1
   data_sample <- lapply(1:sample_size, function(i) {  # Loop over Monte Carlo samples.
 
     # Select a reference instance.
@@ -216,173 +131,159 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     # Shuffle the column indices, keeping all column indices.
     feature_indices_random <- sample(1:n_features, size = n_features, replace = FALSE)
 
+    feature_names_random <- names(explain)[feature_indices_random]
+
     # Shuffle the column order for the randomly selected instance.
     reference_instance <- reference[reference_index, feature_indices_random, drop = FALSE]
 
-    # For the instances to be explained, shuffle the columns to match the randomly selected and shuffled instance.
+    # For the instance(s) to be explained, shuffle the columns to match the randomly selected and shuffled instance.
     explain_instances <- explain[, feature_indices_random, drop = FALSE]
 
-    data_sample_feature <- lapply_function(1:n_target_features, function(j) {  # Loop over features per Monte Carlo sample.
+    data_sample_feature <- lapply_function(seq_along(target_features), function(j) {  # Loop over features per Monte Carlo sample.
 
-      # For each feature in the loop, find the position or index of the shuffled column. This index is the pivot point/column
-      # that separates the real instance (to the left) from the random instance (to the right).
-      target_feature_index <- which(names(explain) == target_feature_order[j])
-      target_feature_index_shuffled <- which(names(explain)[feature_indices_random] == target_feature_order[j])
+      target_feature_index <- which(names(explain) == target_features[j])
+      target_feature_index_shuffled <- which(names(explain)[feature_indices_random] == target_features[j])
 
-      # If there are any causal specifications, select the formula where the outcome matches the target feature.
-      # Note that a target feature may be endogenous or exogenous--both need to be adjust for asymmetric calculations.
-      if (any(causal_target_all %in% target_feature_order[j])) {
+      # Feature index shuffling for asymmetric Shapley values.
+      if (target_features[j] %in% nodes) {
 
-        causal_target <- causal_target_all[j]  #[which(causal_target_all == target_features[j])]
-        # Find the list of causal effects that matches the causal feature in this 'j' loop.
-        causal_effects <- unlist(causal_effects_all[j]) #unlist(causal_effects_all[which(causal_target_all == target_features[j])])
+        target_feature_causes_these_features <- unlist(each_node_causes[target_features[j]])  # Exogenous target feature
+        target_feature_is_caused_by <- unlist(each_node_is_an_effect_from[target_features[j]])  # Endogenous target feature
 
-      } else {
+        target_index <- target_feature_index_shuffled
+        causes_indices <- which(feature_names_random %in% target_feature_is_caused_by[-1])
+        effects_indices <- which(feature_names_random %in% target_feature_causes_these_features[-1])
+        sample_indices <- feature_indices_random[!feature_indices_random %in% c(target_index, causes_indices, effects_indices)]
+        sample_real_indices <- sample_indices[sample_indices < target_index]  # Not in causal diagram, feature data from 'explain'.
+        sample_fake_indices <- sample_indices[sample_indices > target_index]  # Not in causal diagram, feature data from 'reference'.
 
-        causal_target <- "causal_target_not_in_target_features[j]"
-        causal_effects <- "causal_target_not_in_target_features[j]"
+        feature_indices_real_causes_real_effects <- c(sample_real_indices, causes_indices, effects_indices, target_index, sample_fake_indices)
+        feature_indices_real_causes_fake_effects <- c(sample_real_indices, causes_indices, target_index, effects_indices, sample_fake_indices)
+        feature_indices_fake_causes_real_effects <- c(sample_real_indices, effects_indices, target_index, causes_indices, sample_fake_indices)
+        feature_indices_fake_causes_fake_effects <- c(sample_real_indices, target_index, causes_indices, effects_indices, sample_fake_indices)
+
+        # Manual check.
+        # feature_names_random[feature_indices_real_causes_real_effects]
+        # feature_names_random[feature_indices_real_causes_fake_effects]
+        # feature_names_random[feature_indices_fake_causes_real_effects]
+        # feature_names_random[feature_indices_fake_causes_fake_effects]
       }
-      #------------------------------------------------------------------------
-      # Re-order shuffled column indices for causal analysis. The purpose is to shift the index of
-      # the target feature closer to the middle of the feature index vector to give enough room to
-      # place N causal effects to the left (real exogenous effects/features that are conditioned on) and
-      # right (fake exogenous effects/features that are not conditioned on) of the target index. The actual
-      # shifting of the effects indices happens immediately after this 'if (...)' statement.
-      if (causal_target %in% target_feature_order[j]) {
-
-        # Find the location of all causal effects in the shuffled feature index vector. For causal effects
-        # where asymmetric Shapley values have been requested, the placeholder feature is ".".
-        effects_indices <- which(names(explain) %in% causal_effects)
-        # Used to move the effects to the left and right of the causal target pivot point.
-        effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
-
-        # If the endogenous causal target is too close to the beginning of the shuffled feature index vector,
-        # move it to position 1 + length(causal_effects) and place the effect indices
-        if (target_feature_index_shuffled <= length(causal_effects)) {
-
-          # Make enough room to place all causal effects to the left of the pivot point to test the real effects.
-          target_feature_index_shuffled_original <- target_feature_index_shuffled
-          target_feature_index_shuffled_shifted <- 1 + length(causal_effects)
-
-          # Swap indices: Move the target feature closer to the middle and take the feature index that the
-          # shifted target is about to replace and put it where the target feature was original. A simple swap.
-          feature_index_overwritten_by_target <- feature_indices_random[target_feature_index_shuffled_shifted]
-          feature_indices_random[target_feature_index_shuffled_shifted] <- target_feature_index
-          feature_indices_random[target_feature_index_shuffled_original] <- feature_index_overwritten_by_target
-
-          # Overwrite for use later in this function: This is the pivot point between real and fake features.
-          target_feature_index_shuffled <- target_feature_index_shuffled_shifted
-
-          # Used to move the effects to the left and right of the causal target pivot point.
-          effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
-
-        } else if (target_feature_index_shuffled > (n_features - length(causal_effects))) {
-
-          # Make enough room to place all causal effects to the right of the pivot point to test the fake effects.
-          target_feature_index_shuffled_original <- target_feature_index_shuffled
-          target_feature_index_shuffled_shifted <- n_features - length(causal_effects)
-
-          # Swap indices: Move the target feature closer to the middle and take the feature index that the
-          # shifted target is about to replace and put it where the target feature was original. A simple swap.
-          feature_index_overwritten_by_target <- feature_indices_random[target_feature_index_shuffled_shifted]
-          feature_indices_random[target_feature_index_shuffled_shifted] <- target_feature_index
-          feature_indices_random[target_feature_index_shuffled_original] <- feature_index_overwritten_by_target
-
-          # Overwrite for use later in this function: This is the pivot point between real and fake features.
-          target_feature_index_shuffled <- target_feature_index_shuffled_shifted
-
-          # Used to move the effects to the left and right of the causal target pivot point.
-          effects_indices_shuffled <- which(names(explain)[feature_indices_random] %in% causal_effects)
-        }  # End feature index shuffling to accomodate N causal effects.
-        #----------------------------------------------------------------------
-        # Move the feature indices for the causal effects to the left (real) and right (fake) of the target
-        # feature in the shuffled feature index vector so that when the Frankenstein instance is made by
-        # concatenating the instance to be explained with a random reference instance, the correct
-        # features are either conditioned on (left/real) or marginalized (right/fake).
-        feature_indices_random_real_effects <- c(feature_indices_random[effects_indices_shuffled], feature_indices_random[-(effects_indices_shuffled)])
-        feature_indices_random_fake_effects <- c(feature_indices_random[-(effects_indices_shuffled)], feature_indices_random[effects_indices_shuffled])
-
-        # The target feature may be at different positions in the shuffled feature index vector depending
-        # on whether or not it was shifted closer to the middle to accomodate N causal effects. As a result,
-        # the target feature pivot point needs to be tracked separately for both real- and fake-effects
-        # Frankenstein instances.
-        target_feature_index_shuffled_real_effects <- which(feature_indices_random_real_effects == target_feature_index)
-        target_feature_index_shuffled_fake_effects <- which(feature_indices_random_fake_effects == target_feature_index)
-      }  # End causal feature index setup.
       #------------------------------------------------------------------------
       # Create the Frankenstein instances: a combination of the instance to be explained with the
       # reference instance to create a new instance that [likely] does not exist in the dataset.
-      if (!causal_target %in% target_feature_order[j]) {  # Symmetric Shapley: non-causal target feature.
+      if (!target_features[j] %in% nodes) {  # Symmetric Shapley: non-causal target feature.
 
-        # These instances have the real target feature under investigation and everything to the right is
-        # from the random reference instance.
+        # These instances have the real target feature and all features to the right of the shuffled
+        # target feature index are from the random reference instance.
 
         # Initialize the instances to be explained.
-        explain_instance_with_target_feature <- explain_instances
+        explain_instance_real_target <- explain_instances
 
         # Only create a Frankenstein instance if the target is not the last feature and there is actually
         # one or more features to the right of the target to replace with the reference.
         if (target_feature_index_shuffled < n_features) {
 
-          explain_instance_with_target_feature[, (target_feature_index_shuffled + 1):(n_features)] <- reference_instance[, (target_feature_index_shuffled + 1):(n_features), drop = FALSE]
+          explain_instance_real_target[, (target_feature_index_shuffled + 1):(n_features)] <- reference_instance[, (target_feature_index_shuffled + 1):(n_features), drop = FALSE]
         }
 
         # These instances are otherwise the same as the Frankenstein instance created above with the
         # exception that the target feature is now replaced with the target feature in the random reference
         # instance. The difference in model predictions between these two Frankenstein instances is
         # what gives us the stochastic Shapley value approximation.
-        explain_instance_without_target_feature <- explain_instance_with_target_feature
-        explain_instance_without_target_feature[, target_feature_index_shuffled] <- reference_instance[, target_feature_index_shuffled]
+        explain_instance_fake_target <- explain_instance_real_target
+        explain_instance_fake_target[, target_feature_index_shuffled] <- reference_instance[, target_feature_index_shuffled, drop = TRUE]
 
-      } else {  # Asymmetric Shapley: causal target feature.
+      } else {  # Asymmetric Shapley: Causal target feature.
 
-        reference_instance_real_effects <- reference[reference_index, feature_indices_random_real_effects, drop = FALSE]
-        reference_instance_fake_effects <- reference[reference_index, feature_indices_random_fake_effects, drop = FALSE]
+        # The following code creates the 8 versions of the instance(s) being explained using Eqn. 15 from https://arxiv.org/pdf/1910.06358.pdf.
+        # The various Frankenstein instances differ by whether or not they (a) condition on the upstream causes,
+        # the downstream effects, both, or neither and (b) if the target feature is real or fake.
 
-        # These instances have the real target feature under investigation and everything to the right is
-        # from the random reference instance.
+        if (target_features[j] %in% causal_nodes) {
 
-        # Initialize the instances to be explained.
-        explain_instance_with_feature_real_effects <- explain[, feature_indices_random_real_effects, drop = FALSE]
-        explain_instance_with_feature_fake_effects <- explain[, feature_indices_random_fake_effects, drop = FALSE]
+          #--------------------------------------------------------------------
+          # Upper left: Upstream causes = real, downstream effects = fake.
+          reference_instance_real_causes_fake_effects <- reference_instance[, feature_indices_real_causes_fake_effects, drop = FALSE]
 
-        # Only create a Frankenstein instance if the target is not the last feature and there is actually
-        # one or more features to the right of the target to replace with the reference.
-        if (target_feature_index_shuffled_real_effects < n_features) {
-          explain_instance_with_feature_real_effects[, (target_feature_index_shuffled_real_effects + 1):(n_features)] <- reference_instance_real_effects[, (target_feature_index_shuffled_real_effects + 1):(n_features), drop = FALSE]
+          explain_instance_real_causes_fake_effects_real_target <- explain_instances[, feature_indices_real_causes_fake_effects, drop = FALSE]
+
+          target_index_temp <- which(names(explain_instance_real_causes_fake_effects_real_target) == target_features[j])
+
+          if (target_index_temp < n_features) {
+
+            explain_instance_real_causes_fake_effects_real_target[, (target_index_temp + 1):(n_features)] <- reference_instance_real_causes_fake_effects[, (target_index_temp + 1):(n_features), drop = FALSE]
+          }
+
+          explain_instance_real_causes_fake_effects_fake_target <- explain_instance_real_causes_fake_effects_real_target
+          explain_instance_real_causes_fake_effects_fake_target[, target_index_temp] <- reference_instance_real_causes_fake_effects[, target_index_temp, drop = TRUE]
+          #--------------------------------------------------------------------
+          # Upper right. Upstream causes = fake, downstream effects = real.
+          reference_instance_fake_causes_real_effects <- reference_instance[, feature_indices_fake_causes_real_effects, drop = FALSE]
+
+          explain_instance_fake_causes_real_effects_real_target_cause <- explain_instances[, feature_indices_fake_causes_real_effects, drop = FALSE]
+
+          target_index_temp <- which(names(explain_instance_fake_causes_real_effects_real_target_cause) == target_features[j])
+
+          if (target_index_temp < n_features) {
+
+            explain_instance_fake_causes_real_effects_real_target_cause[, (target_index_temp + 1):(n_features)] <- reference_instance_fake_causes_real_effects[, (target_index_temp + 1):(n_features), drop = FALSE]
+          }
+
+          explain_instance_fake_causes_real_effects_fake_target_cause <- explain_instance_fake_causes_real_effects_real_target_cause
+          explain_instance_fake_causes_real_effects_fake_target_cause[, target_index_temp] <- reference_instance_fake_causes_real_effects[, target_index_temp, drop = TRUE]
+          #--------------------------------------------------------------------
         }
 
-        if (target_feature_index_shuffled_fake_effects < n_features) {
-          explain_instance_with_feature_fake_effects[, (target_feature_index_shuffled_fake_effects + 1):(n_features)] <- reference_instance_fake_effects[, (target_feature_index_shuffled_fake_effects + 1):(n_features), drop = FALSE]
-        }
+        if (target_features[j] %in% effect_nodes) {
 
-        # These instances are otherwise the same as the Frankenstein instances created above with the
-        # exception that the target feature is now replaced with the target feature in the random reference
-        # instance. The difference in model predictions between these four Frankenstein instances is
-        # what gives us the stochastic Shapley value approximation. These four instances represent the four
-        # instances in eqn. 14 in https://arxiv.org/pdf/1910.06358.pdf.
-        explain_instance_without_feature_real_effects <- explain_instance_with_feature_real_effects
-        explain_instance_without_feature_real_effects[, target_feature_index_shuffled_real_effects] <- reference_instance_real_effects[, target_feature_index_shuffled_real_effects]
+          #--------------------------------------------------------------------
+          # Bottom left. Upstream causes = real, downstream effects = fake.
+          reference_instance_real_causes_fake_effects <- reference_instance[, feature_indices_real_causes_fake_effects, drop = FALSE]
 
-        explain_instance_without_feature_fake_effects <- explain_instance_with_feature_fake_effects
-        explain_instance_without_feature_fake_effects[, target_feature_index_shuffled_fake_effects] <- reference_instance_fake_effects[, target_feature_index_shuffled_fake_effects]
-      }  # End Frankenstein
+          explain_instance_real_causes_fake_effects_real_target_effect <- explain_instances[, feature_indices_real_causes_fake_effects, drop = FALSE]
+
+          target_index_temp <- which(names(explain_instance_real_causes_fake_effects_real_target_effect) == target_features[j])
+
+          if (target_index_temp < n_features) {
+
+            explain_instance_real_causes_fake_effects_real_target_effect[, (target_index_temp + 1):(n_features)] <- reference_instance_real_causes_fake_effects[, (target_index_temp + 1):(n_features), drop = FALSE]
+          }
+
+          explain_instance_real_causes_fake_effects_fake_target_effect <- explain_instance_real_causes_fake_effects_real_target_effect
+          explain_instance_real_causes_fake_effects_fake_target_effect[, target_index_temp] <- reference_instance_real_causes_fake_effects[, target_index_temp, drop = TRUE]
+          #--------------------------------------------------------------------
+          # Bottom right. Upstream causes = fake, downstream effects = real.
+          reference_instance_fake_causes_real_effects <- reference_instance[, feature_indices_fake_causes_real_effects, drop = FALSE]
+
+          explain_instance_fake_causes_real_effects_real_target <- explain_instances[, feature_indices_fake_causes_real_effects, drop = FALSE]
+
+          target_index_temp <- which(names(explain_instance_fake_causes_real_effects_real_target) == target_features[j])
+
+          if (target_index_temp < n_features) {
+
+            explain_instance_fake_causes_real_effects_real_target[, (target_index_temp + 1):(n_features)] <- reference_instance_fake_causes_real_effects[, (target_index_temp + 1):(n_features), drop = FALSE]
+          }
+
+          explain_instance_fake_causes_real_effects_fake_target <- explain_instance_fake_causes_real_effects_real_target
+          explain_instance_fake_causes_real_effects_fake_target[, target_index_temp] <- reference_instance_fake_causes_real_effects[, target_index_temp, drop = TRUE]
+        }  # End causal Frankenstein.
+      }  # End Frankenstein.
       #------------------------------------------------------------------------
       # Reset the randomly shuffled features in the Frankenstein instances so that they are in the
-      # correct/original order from the user-defined predict() function.
+      # correct/original order for the user-defined predict() function.
       # We'll also add meta-data so that instance-level Shapley values can be calculated with dplyr::group_by().
-      if (!causal_target %in% target_feature_order[j]) {  # Symmetric Shapley: non-causal target feature.
+      if (!target_features[j] %in% nodes) {  # Symmetric Shapley: non-causal target feature.
 
-        explain_instance_with_target_feature <- explain_instance_with_target_feature[, order(feature_indices_random), drop = FALSE]
-        explain_instance_without_target_feature <- explain_instance_without_target_feature[, order(feature_indices_random), drop = FALSE]
+        explain_instance_real_target <- explain_instance_real_target[, names(explain), drop = FALSE]
+        explain_instance_fake_target <- explain_instance_fake_target[, names(explain), drop = FALSE]
 
-        data_explain_instance <- dplyr::bind_rows(list(explain_instance_with_target_feature, explain_instance_without_target_feature))
+        data_explain_instance <- dplyr::bind_rows(list(explain_instance_real_target, explain_instance_fake_target))
 
         data_explain_instance$index <- rep(1:nrow(explain), 2)  # Two Frankenstein instances per explained instance.
 
-        data_explain_instance$feature_group <- rep(c('feature_static', 'feature_random'), each = nrow(explain))
+        data_explain_instance$feature_group <- rep(c('real_target', 'fake_target'), each = nrow(explain))
 
-        data_explain_instance$feature_name <- target_feature_order[j]
+        data_explain_instance$feature_name <- target_features[j]
 
         data_explain_instance$causal <- 0
 
@@ -390,37 +291,95 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
 
       } else {  # Asymmetric Shapley: causal target feature.
 
-        explain_instance_with_feature_real_effects <- explain_instance_with_feature_real_effects[, order(feature_indices_random_real_effects), drop = FALSE]
-        explain_instance_with_feature_fake_effects <- explain_instance_with_feature_fake_effects[, order(feature_indices_random_fake_effects), drop = FALSE]
-        explain_instance_without_feature_real_effects <- explain_instance_without_feature_real_effects[, order(feature_indices_random_real_effects), drop = FALSE]
-        explain_instance_without_feature_fake_effects <- explain_instance_without_feature_fake_effects[, order(feature_indices_random_fake_effects), drop = FALSE]
+        if (target_features[j] %in% causal_nodes) {
 
-        data_explain_instance <- dplyr::bind_rows(list(explain_instance_with_feature_real_effects,
-                                                       explain_instance_with_feature_fake_effects,
-                                                       explain_instance_without_feature_real_effects,
-                                                       explain_instance_without_feature_fake_effects))
+          explain_instance_real_causes_fake_effects_real_target <- explain_instance_real_causes_fake_effects_real_target[, names(explain), drop = FALSE]
+          explain_instance_real_causes_fake_effects_fake_target <- explain_instance_real_causes_fake_effects_fake_target[, names(explain), drop = FALSE]
 
-        data_explain_instance$index <- rep(1:nrow(explain), 4)  # Four Frankenstein instances per explained instance.
+          explain_instance_fake_causes_real_effects_real_target_cause <- explain_instance_fake_causes_real_effects_real_target_cause[, names(explain), drop = FALSE]
+          explain_instance_fake_causes_real_effects_fake_target_cause <- explain_instance_fake_causes_real_effects_fake_target_cause[, names(explain), drop = FALSE]
+        }
 
-        data_explain_instance$feature_group <- rep(c('feature_static_real_effects', 'feature_static_fake_effects',
-                                                     'feature_random_real_effects', 'feature_random_fake_effects'),
-                                                   each = nrow(explain))
+        if (target_features[j] %in% effect_nodes) {
 
-        data_explain_instance$feature_name <- target_feature_order[j]
+          explain_instance_real_causes_fake_effects_real_target_effect <- explain_instance_real_causes_fake_effects_real_target_effect[, names(explain), drop = FALSE]
+          explain_instance_real_causes_fake_effects_fake_target_effect <- explain_instance_real_causes_fake_effects_fake_target_effect[, names(explain), drop = FALSE]
+
+          explain_instance_fake_causes_real_effects_real_target <- explain_instance_fake_causes_real_effects_real_target[, names(explain), drop = FALSE]
+          explain_instance_fake_causes_real_effects_fake_target <- explain_instance_fake_causes_real_effects_fake_target[, names(explain), drop = FALSE]
+        }
+        #----------------------------------------------------------------------
+
+        if (target_features[j] %in% causal_nodes) {
+
+          data_explain_instance <- dplyr::bind_rows(list(
+            explain_instance_real_causes_fake_effects_real_target,
+            explain_instance_real_causes_fake_effects_fake_target,
+            explain_instance_fake_causes_real_effects_real_target_cause,
+            explain_instance_fake_causes_real_effects_fake_target_cause
+          ))
+
+          data_explain_instance$index <- rep(1:nrow(explain), 4)  # Four Frankenstein instances per explained instance.
+
+          data_explain_instance$feature_group <- rep(c("real_causes_fake_effects_real_target", "real_causes_fake_effects_fake_target",
+                                                       "fake_causes_real_effects_real_target_cause", "fake_causes_real_effects_fake_target_cause"),
+                                                     each = nrow(explain))
+
+          data_explain_instance$causal_type <- "target_is_a_cause"
+        }
+
+        if (target_features[j] %in% effect_nodes) {
+
+          data_explain_instance <- dplyr::bind_rows(list(
+            explain_instance_real_causes_fake_effects_real_target_effect,
+            explain_instance_real_causes_fake_effects_fake_target_effect,
+            explain_instance_fake_causes_real_effects_real_target,
+            explain_instance_fake_causes_real_effects_fake_target
+          ))
+
+          data_explain_instance$index <- rep(1:nrow(explain), 4)  # Four Frankenstein instances per explained instance.
+
+          data_explain_instance$feature_group <- rep(c("real_causes_fake_effects_real_target_effect", "real_causes_fake_effects_fake_target_effect",
+                                                       "fake_causes_real_effects_real_target", "fake_causes_real_effects_fake_target"),
+                                                     each = nrow(explain))
+
+          data_explain_instance$causal_type <- "target_is_an_effect"
+        }
+
+        if (target_features[j] %in% causal_nodes && target_features[j] %in% effect_nodes) {
+
+          data_explain_instance <- dplyr::bind_rows(list(
+            explain_instance_real_causes_fake_effects_real_target,
+            explain_instance_real_causes_fake_effects_fake_target,
+            explain_instance_fake_causes_real_effects_real_target_cause,
+            explain_instance_fake_causes_real_effects_fake_target_cause,
+            explain_instance_real_causes_fake_effects_real_target_effect,
+            explain_instance_real_causes_fake_effects_fake_target_effect,
+            explain_instance_fake_causes_real_effects_real_target,
+            explain_instance_fake_causes_real_effects_fake_target
+            ))
+
+          data_explain_instance$index <- rep(1:nrow(explain), 8)  # Eight Frankenstein instances per explained instance.
+
+          data_explain_instance$feature_group <- rep(c(
+            "real_causes_fake_effects_real_target", "real_causes_fake_effects_fake_target",  # Target is a causal node.
+            "fake_causes_real_effects_target_cause", "fake_causes_real_effects_fake_target_cause",  # Target is a causal node.
+            "real_causes_fake_effects_real_target_effect", "real_causes_fake_effects_fake_target_effect",  # Target is an effect node.
+            "fake_causes_real_effects_real_target", "fake_causes_real_effects_fake_target"  # Target is an effect node.
+            ),
+          each = nrow(explain))
+
+          data_explain_instance$causal_type <- rep(c(
+            "target_is_a_cause", "target_is_a_cause", "target_is_a_cause", "target_is_a_cause",
+            "target_is_an_effect", "target_is_an_effect", "target_is_an_effect", "target_is_an_effect"
+          ),
+          each = nrow(explain))
+        }
+
+        data_explain_instance$feature_name <- target_features[j]
 
         data_explain_instance$causal <- 1
-
-        # From eqn 16, asymmetric Shapley values for causal targets (shap_u_2) and causal effects (shap_u_1)
-        # are calculated differently; calculations are in predict_shapFlex().
-        if (j <= length(causal)) {  # True causal targets are in the first list slots.
-
-          data_explain_instance$causal_type <- "causal_target"  # Left hand side of the user input formulas.
-
-        } else {
-
-          data_explain_instance$causal_type <- "causal_effect"  # Right hand side of the user input formulas.
-        }
-      }
+      }  # End causal.
       #------------------------------------------------------------------------
       data_explain_instance$sample <- i
 
@@ -444,8 +403,7 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
     predict_function = predict_function,  # input arg.
     n_features = n_features,  # Calculated.
     causal = causal,  # input arg.
-    causal_weights = combined_weights,  # Calculated
-    causal_target = causal_target_all # Calculated.
+    causal_weights = causal_weights  # Calculated.
   )
   #----------------------------------------------------------------------------
   # Melt the input 'explain' data.frame for merging the model features to the Shapley values. Suppress

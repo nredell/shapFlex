@@ -100,6 +100,7 @@ outcome_col <- which(names(data) == outcome_name)
 
 model_formula <- formula(paste0(outcome_name,  "~ ."))
 
+set.seed(1)
 model <- randomForest::randomForest(model_formula, data = data, ntree = 300)
 #------------------------------------------------------------------------------
 # A user-defined prediction function that takes 2 positional arguments and returns
@@ -107,7 +108,7 @@ model <- randomForest::randomForest(model_formula, data = data, ntree = 300)
 # ML model object and (2) a data.frame of model features; transformations of the input
 # data such as converting the data.frame to a matrix should occur within this wrapper.
 predict_function <- function(model, data) {
-
+  
   # We'll predict the probability of the outcome being >50k.
   data_pred <- data.frame("y_pred" = predict(model, data, type = "prob")[, 2])
   return(data_pred)
@@ -122,11 +123,13 @@ sample_size <- 60  # Number of Monte Carlo samples.
 
 target_features <- c("marital_status", "education", "relationship",
                      "age", "sex", "race", "hours_per_week")  # Optional: A subset of features.
-                     
-causal = list(marital_status ~ age + sex + race + native_country,  # Causal specifications.
-              education ~ age + sex + race + native_country,
-              relationship ~ age + sex + race + native_country)
 
+causal <- data.frame(
+  "cause" = c("age", "sex", "race", "native_country",
+              "age", "sex", "race", "native_country", "age",
+              "sex", "race", "native_country"),
+  "effect" = c(rep("marital_status", 4), rep("education", 4), rep("relationship", 4))
+                     )
 #------------------------------------------------------------------------------
 # 1: Non-causal symmetric Shapley values: ~10 seconds to run.
 set.seed(1)
@@ -137,7 +140,7 @@ explained_non_causal <- shapFlex::shapFlex(explain = explain,
                                            target_features = target_features,
                                            sample_size = sample_size)
 #------------------------------------------------------------------------------
-# 2: Causal asymmetric Shapley values with full causal weights of 1: ~36 seconds to run.
+# 2: Causal asymmetric Shapley values with full causal weights of 1: ~30 seconds to run.
 set.seed(1)
 explained_full <- shapFlex::shapFlex(explain = explain,
                                      reference = reference,
@@ -145,10 +148,10 @@ explained_full <- shapFlex::shapFlex(explain = explain,
                                      predict_function = predict_function,
                                      target_features = target_features,
                                      causal = causal,
-                                     causal_weights = rep(1, length(causal)),  # Pure causal weights
+                                     causal_weights = rep(1, nrow(causal)),  # Pure causal weights
                                      sample_size = sample_size)
 #------------------------------------------------------------------------------
-# 3: Causal asymmetric Shapley values with agnostic causal weights of .5: ~36 seconds to run.
+# 3: Causal asymmetric Shapley values with agnostic causal weights of .5: ~30 seconds to run.
 set.seed(1)
 explained_half <- shapFlex::shapFlex(explain = explain,
                                      reference = reference,
@@ -156,7 +159,7 @@ explained_half <- shapFlex::shapFlex(explain = explain,
                                      predict_function = predict_function,
                                      target_features = target_features,
                                      causal = causal,
-                                     causal_weights = rep(.5, length(causal)),  # Approximates symmetric calc.
+                                     causal_weights = rep(.5, nrow(causal)),  # Approximates symmetric calc.
                                      sample_size = sample_size)
 ```
 

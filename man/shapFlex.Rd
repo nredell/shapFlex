@@ -35,17 +35,12 @@ and (2) a data.frame of instances with the same format as \code{explain}. For nu
 For high-dimensional models, selecting a subset of interesting features may dramatically speed up computation time. The default behavior is
 to return Shapley values for all instances and features in \code{explain}.}
 
-\item{causal}{Optional. A list of 1 or more formulas that specify a causal direction for computing asymmetric Shapley values. For example,
-\code{list(x1 ~ x2 + x3)} or \code{list(formula(x1 ~ x2 + x3))} computes Shapley values for \code{x_1} after conditioning on
-the true/actual values of \code{x2} and \code{x3} for the instance being explained. Only 1 feature is allowed on the left hand side
-of the formula, and only 1 formula is allowed per left hand side feature i.e., no duplicated causal constraints for a target feature.}
+\item{causal}{Optional. A 2-column data.frame of feature names: The 1st column gives causes, the 2nd column gives effects.}
 
-\item{causal_weights}{Optional. A numeric vector of \code{length(causal)} with weights between 0 and 1 that specifies the strength of
+\item{causal_weights}{Optional. A numeric vector of \code{nrow(causal)} with weights between 0 and 1 that specifies the strength of
 the causal asymmetric Shapley values. A weight of 1--the default if \code{causal_weights = NULL}--estimates a pure causal effect where the
-instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling (e.g., Shapley values for \code{x1}
-are based on the instance's true \code{x2} and \code{x3}). A weight of .5 is equivalent to the symmetric Shapley value
-calculation--within sampling error--and represents the case where the researcher is uncertain as to whether or not \code{x2} and
-\code{x_3} causally precede or follow \code{x1}.}
+instance to be explained is always conditioned on its true/actual values in the Monte Carlo sampling. A weight of .5 is equivalent to
+the symmetric Shapley value calculation--within sampling error.}
 
 \item{sample_size}{A numeric vector of length 1 giving the number of Monte Carlo samples used to compute the stochastic Shapley values for
 each feature.}

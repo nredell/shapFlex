@@ -19,7 +19,8 @@ Imports:
     rlang (>= 0.4.0),
     magrittr (>= 1.5),
     testthat (>= 2.3.0),
-    randomForest
+    randomForest (>= 4.6.14),
+    igraph (>= 1.2.4)
 RoxygenNote: 7.0.2
 Collate: 
     'shapFlex.R'
