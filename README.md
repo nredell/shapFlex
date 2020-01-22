@@ -121,7 +121,7 @@ reference <- data[, -outcome_col]  # An optional reference population to compute
 
 sample_size <- 60  # Number of Monte Carlo samples.
 
-target_features <- c("marital_status", "education", "relationship",
+target_features <- c("marital_status", "education", "relationship",  "native_country",
                      "age", "sex", "race", "hours_per_week")  # Optional: A subset of features.
 
 causal <- data.frame(
