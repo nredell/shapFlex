@@ -130,7 +130,28 @@ causal <- data.frame(
               "sex", "race", "native_country"),
   "effect" = c(rep("marital_status", 4), rep("education", 4), rep("relationship", 4))
                      )
-#------------------------------------------------------------------------------
+```
+
+* Plot the causal setup.
+
+``` r
+set.seed(1)
+p <- ggraph(causal, layout = "kk")
+p <- p + geom_edge_link(aes(start_cap = label_rect(node1.name),
+                            end_cap = label_rect(node2.name)),
+                        arrow = arrow(length = unit(5, 'mm'), type = "closed"),
+                        color = "grey25")
+p <- p + geom_node_label(aes(label = name), fontface = "bold")
+p <- p + scale_x_continuous(expand = expand_scale(0.2))
+p <- p + theme_graph(foreground = 'white', fg_text_colour = 'white')
+p
+```
+
+![](./tools/causal_diagram.png)
+
+* Calculate the Shapley values from our model under various degrees of belief in the causal structure.
+
+``` r
 # 1: Non-causal symmetric Shapley values: ~10 seconds to run.
 set.seed(1)
 explained_non_causal <- shapFlex::shapFlex(explain = explain,

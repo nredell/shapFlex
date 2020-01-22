@@ -20,7 +20,8 @@ Imports:
     magrittr (>= 1.5),
     testthat (>= 2.3.0),
     randomForest (>= 4.6.14),
-    igraph (>= 1.2.4)
+    igraph (>= 1.2.4),
+    purrr (>= 0.3.3)
 RoxygenNote: 7.0.2
 Collate: 
     'shapFlex.R'

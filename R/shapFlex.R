@@ -349,10 +349,12 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
         if (target_features[j] %in% causal_nodes && target_features[j] %in% effect_nodes) {
 
           data_explain_instance <- dplyr::bind_rows(list(
+
             explain_instance_real_causes_fake_effects_real_target,
             explain_instance_real_causes_fake_effects_fake_target,
             explain_instance_fake_causes_real_effects_real_target_cause,
             explain_instance_fake_causes_real_effects_fake_target_cause,
+
             explain_instance_real_causes_fake_effects_real_target_effect,
             explain_instance_real_causes_fake_effects_fake_target_effect,
             explain_instance_fake_causes_real_effects_real_target,
@@ -363,7 +365,7 @@ shapFlex <- function(explain, reference = NULL, model, predict_function, target_
 
           data_explain_instance$feature_group <- rep(c(
             "real_causes_fake_effects_real_target", "real_causes_fake_effects_fake_target",  # Target is a causal node.
-            "fake_causes_real_effects_target_cause", "fake_causes_real_effects_fake_target_cause",  # Target is a causal node.
+            "fake_causes_real_effects_real_target_cause", "fake_causes_real_effects_fake_target_cause",  # Target is a causal node.
             "real_causes_fake_effects_real_target_effect", "real_causes_fake_effects_fake_target_effect",  # Target is an effect node.
             "fake_causes_real_effects_real_target", "fake_causes_real_effects_fake_target"  # Target is an effect node.
             ),

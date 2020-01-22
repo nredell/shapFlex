@@ -26,9 +26,9 @@ test_that("a feature that is both a causal target and causal effect is computed 
   reference <- data[, -outcome_col]
   sample_size <- 60
   target_features <- c("marital_status", "education")
-  # Features are both causes and effects so
-  causal <- list(marital_status ~ education,
-                 education ~ marital_status)
+
+  causal <- data.frame("cause" = c("marital_status", "education"),
+                       "effect" = c("education", "marital_status"))
   #------------------------------------------------------------------------------
   set.seed(1)
   explained_full <- shapFlex::shapFlex(explain = explain,
@@ -37,7 +37,7 @@ test_that("a feature that is both a causal target and causal effect is computed 
                                        predict_function = predict_function,
                                        target_features = target_features,
                                        causal = causal,
-                                       causal_weights = rep(1, length(causal)),  # Pure causal weights
+                                       causal_weights = rep(1, nrow(causal)),  # Pure causal weights
                                        sample_size = sample_size)
   #------------------------------------------------------------------------------
   set.seed(1)
@@ -47,7 +47,7 @@ test_that("a feature that is both a causal target and causal effect is computed 
                                        predict_function = predict_function,
                                        target_features = target_features,
                                        causal = causal,
-                                       causal_weights = rep(.5, length(causal)),  # Approximates symmetric calc.
+                                       causal_weights = rep(.5, nrow(causal)),  # Approximates symmetric calc.
                                        sample_size = sample_size)
   #------------------------------------------------------------------------------
   identical(explained_full, explained_half)
