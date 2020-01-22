@@ -221,7 +221,7 @@ p <- p + xlab(NULL) + ylab("Average Shapley effect (baseline is .23)") + labs(fi
   ggtitle("Average Shapley Feature Effects Based on 3 Causal Assumptions")
 p
 ```
-![](./tools/shap_avg_feature_effects.png)
+![](./tools/shap_avg_feature_effects.jpeg)
 
 ***
 
