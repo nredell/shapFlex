@@ -13,7 +13,7 @@ and instance/row-level **local feature importance** in black-box machine learnin
 
 ![](./tools/shap_diagram.PNG)
 
-* **Any ML model** + **Causal specifications among model features** + **Shapley algorithm** = **Causal ML model interpretability**
+* **Any ML model** + **Causal hypotheses among features** + **Shapley algorithm** = **Causal ML model interpretability**
 
 This package implements the algorithm described in 
 [Štrumbelj and Kononenko's (2014) sampling-based Shapley approximation algorithm](https://link.springer.com/article/10.1007%2Fs10115-013-0679-x) 
