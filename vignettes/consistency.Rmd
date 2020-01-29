@@ -1,7 +1,7 @@
 ---
 title: "shapFlex Consistency"
 author: "Nickalus Redell"
-date: "`r lubridate::today()`"
+date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{shapFlex Consistency}
