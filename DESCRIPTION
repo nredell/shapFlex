@@ -31,5 +31,6 @@ Collate:
 Suggests: 
     covr (>= 3.3.2),
     ggplot2 (>= 3.1.0),
-    knitr (>= 1.22)
+    knitr (>= 1.22),
+    rmarkdown (>= 1.11)
 VignetteBuilder: knitr
