@@ -59,9 +59,7 @@ library(shapFlex)
 
 ## Vignettes
 
-* A vignette detailing how the algorithms work as well as how various types of causal assumptions can be 
-specified in `shapFlex` is forthcoming.
-
+**[Consistency between stochastic and tree-based Shapley values.](https://nredell.github.io/shapFlex/doc/consistency.html)** 
 
 ## Examples
 

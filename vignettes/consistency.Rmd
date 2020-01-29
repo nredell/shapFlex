@@ -1,0 +1,162 @@
+---
+title: "shapFlex Consistency"
+author: "Nickalus Redell"
+date: "`r lubridate::today()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{shapFlex Consistency}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(fig.width = 7.15, fig.height = 5)
+knitr::opts_knit$set(fig.width = 7.15, fig.height = 5)
+```
+
+# Purpose
+
+* The goal of this vignette is to show how the stochastic Shapley values produced from `shapFlex` are correlated 
+with the non-stochastic Shapley values computed in the Python **[shap](https://github.com/slundberg/shap)** package using the 
+implentation discussed **[here](https://arxiv.org/abs/1802.03888)**.
+
+* Treating the tree-based Shapley values from `shap` as an approximation of the ground truth, we would 
+like to see if the sampling based method in `shapFlex` can reproduce these values within sampling variability.
+
+* We'll use **[catboost's](https://catboost.ai/)** `R` package which has a port of `shap` found in the 
+`catboost.get_feature_importance()` function.
+
+* While `shap` should be the preferred method when modeling with boosted trees, this vignette demonstrates 
+that the more generic `shapFlex` implementation can be applied to all classes of ML prediction models, boosted 
+tree models included.
+
+
+# Example
+
+## Load Packages and Data
+
+```{r, warning = FALSE, message = FALSE}
+library(shapFlex)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(catboost)  # version 0.20
+
+data("data_adult", package = "shapFlex")
+data <- data_adult
+
+outcome_name <- "income"
+outcome_col <- which(names(data) == outcome_name)
+```
+
+
+## Model Training
+
+* The accuracy of the model isn't entirely important because we're interested in comparing Shapley 
+values across algorithms: stochastic vs. tree-based.
+
+```{r}
+cat_features <- which(unlist(Map(is.factor, data[, -outcome_col]))) - 1
+
+data_pool <- catboost.load_pool(data = data[, -outcome_col], 
+                                label = as.vector(as.numeric(data[, outcome_col])) - 1,
+                                cat_features = cat_features)
+
+set.seed(224)
+model_catboost <- catboost.train(data_pool, NULL,
+                                 params = list(loss_function = 'CrossEntropy', 
+                                               iterations = 30, logging_level = "Silent"))
+```
+
+
+## Stochastic Shapley Values
+
+### Predict function
+
+* For `shapFlex`, the required user-defined prediction function takes 2 positional arguments 
+and returns a 1-column `data.frame`. 
+
+* Note the creation of the `catboost`-specific data format inside this function.
+
+```{r}
+predict_function <- function(model, data) {
+  
+  data_pool <- catboost.load_pool(data = data, cat_features = cat_features)
+  
+  # Predictions and Shapley explanations will be in log-odds space.
+  data_pred <- data.frame("y_pred" = catboost.predict(model, data_pool))
+
+  return(data_pred)
+}
+```
+
+
+### shapFlex()
+
+* Explaining 300 instances with 13 model features on a 16 GB RAM laptop without parallel processing takes ~3 seconds.
+
+```{r}
+explain <- data[1:300, -outcome_col]  # Compute Shapley feature-level predictions for 300 instances.
+
+reference <- data[, -outcome_col]  # An optional reference population to compute the baseline prediction.
+
+sample_size <- 100  # Number of Monte Carlo samples.
+
+set.seed(224)
+data_shap <- shapFlex::shapFlex(explain = explain,
+                                reference = reference,
+                                model = model_catboost,
+                                predict_function = predict_function,
+                                sample_size = sample_size)
+```
+
+
+## Tree-Based Shapley Values
+
+* We'll select the same 300 samples for comparison.
+
+```{r}
+data_pool <- catboost.load_pool(data = data[1:300, -outcome_col], 
+                                label = as.vector(as.numeric(data[1:300, outcome_col])) - 1,
+                                cat_features = cat_features)
+
+data_shap_catboost <- catboost.get_feature_importance(model_catboost, pool = data_pool, 
+                                                      type = "ShapValues")
+
+data_shap_catboost <- data.frame(data_shap_catboost[, -ncol(data_shap_catboost)])  # Remove the intercept column.
+
+data_shap_catboost$index <- 1:nrow(data_shap_catboost)
+
+data_shap_catboost <- tidyr::gather(data_shap_catboost, key = "feature_name", 
+                                    value = "shap_effect_catboost", -index)
+```
+
+
+## Results
+
+* For **10 out of 13 model features**, the **correlation** between the stochastic and tree-based 
+Shapley values was **> .99** and above .96 for the remaining features.
+
+```{r}
+data_all <- dplyr::inner_join(data_shap, data_shap_catboost, by = c("index", "feature_name"))
+
+data_cor <- data_all %>%
+  dplyr::group_by(feature_name) %>%
+  dplyr::summarise("cor_coef" = round(cor(shap_effect, shap_effect_catboost), 3))
+
+data_cor
+```
+
+<br>
+
+```{r}
+p <- ggplot(data_all, aes(shap_effect_catboost, shap_effect))
+p <- p + geom_point(alpha = .25)
+p <- p + geom_abline(color = "red")
+p <- p + facet_wrap(~ feature_name, scales = "free")
+p <- p + theme_bw() + xlab("catboost tree-based Shapley values") + ylab("shapFlex stochastic Shapley values") + 
+  theme(axis.title = element_text(face = "bold"))
+p
+```
+
+<br>
