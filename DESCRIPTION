@@ -30,6 +30,6 @@ Collate:
     'data_adult.R'
 Suggests: 
     covr (>= 3.3.2),
-    catboost (>= 0.16),
-    ggplot2 (>= 3.1.0)
+    ggplot2 (>= 3.1.0),
+    knitr (>= 1.22)
 VignetteBuilder: knitr

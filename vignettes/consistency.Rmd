@@ -35,12 +35,19 @@ tree models included.
 
 ## Load Packages and Data
 
+```{r, eval = FALSE}
+library(devtools)
+# Install catboost which is not available on CRAN (Windows link below).
+devtools::install_url('https://github.com/catboost/catboost/releases/download/v0.20/catboost-R-Windows-0.20.tgz',
+                      INSTALL_opts = c("--no-multiarch"))
+library(catboost)  # version 0.20
+```
+
 ```{r, warning = FALSE, message = FALSE}
 library(shapFlex)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(catboost)  # version 0.20
 
 data("data_adult", package = "shapFlex")
 data <- data_adult
@@ -55,7 +62,7 @@ outcome_col <- which(names(data) == outcome_name)
 * The accuracy of the model isn't entirely important because we're interested in comparing Shapley 
 values across algorithms: stochastic vs. tree-based.
 
-```{r}
+```{r, eval = FALSE}
 cat_features <- which(unlist(Map(is.factor, data[, -outcome_col]))) - 1
 
 data_pool <- catboost.load_pool(data = data[, -outcome_col], 
@@ -78,7 +85,7 @@ and returns a 1-column `data.frame`.
 
 * Note the creation of the `catboost`-specific data format inside this function.
 
-```{r}
+```{r, eval = FALSE}
 predict_function <- function(model, data) {
   
   data_pool <- catboost.load_pool(data = data, cat_features = cat_features)
@@ -95,7 +102,7 @@ predict_function <- function(model, data) {
 
 * Explaining 300 instances with 13 model features on a 16 GB RAM laptop without parallel processing takes ~3 seconds.
 
-```{r}
+```{r, eval = FALSE}
 explain <- data[1:300, -outcome_col]  # Compute Shapley feature-level predictions for 300 instances.
 
 reference <- data[, -outcome_col]  # An optional reference population to compute the baseline prediction.
@@ -115,7 +122,7 @@ data_shap <- shapFlex::shapFlex(explain = explain,
 
 * We'll select the same 300 samples for comparison.
 
-```{r}
+```{r, eval = FALSE}
 data_pool <- catboost.load_pool(data = data[1:300, -outcome_col], 
                                 label = as.vector(as.numeric(data[1:300, outcome_col])) - 1,
                                 cat_features = cat_features)
@@ -137,9 +144,20 @@ data_shap_catboost <- tidyr::gather(data_shap_catboost, key = "feature_name",
 * For **10 out of 13 model features**, the **correlation** between the stochastic and tree-based 
 Shapley values was **> .99** and above .96 for the remaining features.
 
-```{r}
+```{r, eval = FALSE}
 data_all <- dplyr::inner_join(data_shap, data_shap_catboost, by = c("index", "feature_name"))
+```
 
+```{r, eval = FALSE, include = FALSE}
+write.csv(data_all, "data_shap.csv", row.names = FALSE)
+```
+
+```{r, include = FALSE}
+data_all <- read.csv("data_shap.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r}
 data_cor <- data_all %>%
   dplyr::group_by(feature_name) %>%
   dplyr::summarise("cor_coef" = round(cor(shap_effect, shap_effect_catboost), 3))
