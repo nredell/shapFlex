@@ -331,5 +331,3 @@ Redell, N. (2019). [Shapley decomposition of R^2 in machine learning models](htt
 * Vignettes detailing how the algorithms work--in pictures.
 
 * Think about how `lavaan` and `piecewiseSEM` models might be incorporated.
-
-* This package, done right, might be a good fit for the R Journal.
